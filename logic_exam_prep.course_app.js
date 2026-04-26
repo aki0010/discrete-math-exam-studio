@@ -579,6 +579,7 @@
     const coach = examCoach[topic.id];
     const questions = (data.examQuestions || []).filter((item) => item.topicId === topic.id);
     if (!coach || !questions.length) return "";
+    const solutionMap = new Map((data.examSolutions || []).map((solution) => [`${solution.date}-${solution.part}`, solution]));
 
     return `
       <section class="panel">
@@ -595,6 +596,9 @@
         </div>
         <div class="exam-trainer-list">
           ${questions.map((item) => `
+            ${(() => {
+              const solution = solutionMap.get(`${item.date}-${item.part}`);
+              return `
             <details class="exam-trainer-card">
               <summary>
                 <span>${item.date} — ${item.part}</span>
@@ -612,8 +616,27 @@
                     <p>${coach.scoreTip}</p>
                   </div>
                 </div>
+                ${solution ? `
+                  <div class="guided-solution">
+                    <h4>Step-by-step solution</h4>
+                    ${solution.parts.map((part) => `
+                      <section class="solution-part">
+                        <h5>${part.label}</h5>
+                        <ol class="solution-list">
+                          ${part.steps.map((step) => `<li>${step}</li>`).join("")}
+                        </ol>
+                        <div class="exam-answer"><strong>Answer:</strong> ${part.answer}</div>
+                        ${part.warning ? `<p class="solution-warning"><strong>Common mistake:</strong> ${part.warning}</p>` : ""}
+                      </section>
+                    `).join("")}
+                  </div>
+                ` : `
+                  <div class="exam-answer"><strong>Solution status:</strong> This question is included and mapped. A full worked solution has not been written yet.</div>
+                `}
               </div>
             </details>
+              `;
+            })()}
           `).join("")}
         </div>
       </section>
