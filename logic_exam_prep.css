@@ -103,6 +103,29 @@
       background: linear-gradient(160deg, rgba(28,38,37,0.9), rgba(20,28,27,0.78));
     }
 
+    [data-theme="dark"] .exam-trainer-card,
+    [data-theme="dark"] .subquestion-card,
+    [data-theme="dark"] .exam-trainer-guide > div,
+    [data-theme="dark"] .guided-solution,
+    [data-theme="dark"] .solution-part,
+    [data-theme="dark"] .pass-card,
+    [data-theme="dark"] .lab-card {
+      background: rgba(28, 38, 37, 0.78);
+      border-color: var(--line);
+    }
+
+    [data-theme="dark"] .exam-trainer-card summary strong,
+    [data-theme="dark"] .question-breakdown h4,
+    [data-theme="dark"] .guided-solution h4 {
+      color: var(--navy);
+    }
+
+    [data-theme="dark"] .solution-warning {
+      background: rgba(196, 92, 104, 0.14);
+      border-left-color: var(--berry);
+      color: var(--ink);
+    }
+
     [data-theme="dark"] .nav-btn.is-active {
       background: var(--forest);
     }
