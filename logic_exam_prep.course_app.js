@@ -24,6 +24,71 @@
     learning: 0
   };
   const hintState = new Map(); // qIndex -> shown
+  const examCoach = {
+    "logic-proofs": {
+      cues: ["Truth table", "tautology / contradiction", "proof sequence", "negate implication", "contradiction proof"],
+      attack: ["Find the main connective before calculating.", "For a truth table, build inner columns first.", "For a proof sequence, split premises and write one legal rule per line.", "For negation, hit the outermost connective first.", "End with the exact requested conclusion, not a similar sentence."],
+      mistakes: ["Treating implication like ordinary if/then instead of the T -> F rule.", "Skipping rule names in proof sequences.", "Negating an implication as another implication.", "Calling a formula a tautology after checking only one row."],
+      firstMove: "Circle the main connective and decide: truth table, equivalence rewrite, or proof-rule chain.",
+      scoreTip: "Even if the final proof is hard, earn points by writing the premises, the target, and valid first rules such as De Morgan, MP, MT, or contrapositive."
+    },
+    "predicate-quantifiers": {
+      cues: ["all", "some", "no", "only", "not every", "negate the predicate formula"],
+      attack: ["Define predicates first.", "Choose the quantifier skeleton before writing connectives.", "Use implication for universal restrictions.", "Use AND for existential witnesses.", "For negation, flip quantifiers one at a time and push NOT inward."],
+      mistakes: ["Using AND for 'all A are B'.", "Using implication for 'some A are B'.", "Reversing 'only'.", "Changing variable order in nested quantifiers without noticing."],
+      firstMove: "Underline the English keyword: all/some/no/only. That decides most of the formula.",
+      scoreTip: "Always write predicate definitions. They are easy points and make the translation much safer."
+    },
+    "sets-functions": {
+      cues: ["power set", "Cartesian product", "set operations", "injective", "surjective", "binary operation", "onto"],
+      attack: ["Write the domain and codomain explicitly.", "For sets, compute inside operations and complements step by step.", "For power sets, count elements first.", "For injective, look for collisions.", "For surjective, check every codomain target is hit."],
+      mistakes: ["Confusing codomain with range.", "Thinking a function must be one-to-one.", "Forgetting that power set size is 2 to the set size.", "Ignoring undefined outputs in binary-operation questions."],
+      firstMove: "Write 'domain -> codomain' and list what each side contains.",
+      scoreTip: "For function questions, one good counterexample can earn most of the points."
+    },
+    "relations-graphs": {
+      cues: ["equivalence relation", "degree sum", "complete graph", "adjacency matrix", "connected", "Euler circuit", "graph complement"],
+      attack: ["For relations, test reflexive, symmetric, transitive separately.", "For equivalence classes, identify exactly what feature is shared.", "For graphs, list vertices, edges, and degrees.", "Use handshaking for degree sums.", "For Euler circuits, check connectedness and even degrees."],
+      mistakes: ["Mixing symmetric with antisymmetric.", "Forgetting loops in reflexive relations.", "Counting each undirected edge twice.", "Drawing graph complements with old edges still included."],
+      firstMove: "Make a small table: vertices/elements, edges/pairs, degrees/properties.",
+      scoreTip: "When proving an equivalence relation, label the three mini-proofs. The grader can award partial points cleanly."
+    },
+    "number-theory": {
+      cues: ["divides", "gcd", "Euclidean algorithm", "Bezout", "mod", "coprime", "prime/composite", "parity"],
+      attack: ["Translate divides into an equation.", "For gcd, run Euclid line by line.", "For Bezout, back-substitute the Euclidean algorithm.", "For parity, split into even/odd or factor.", "For modular powers, look for cycles."],
+      mistakes: ["Dividing in modular arithmetic without an inverse.", "Stopping at remainder 0 instead of the last nonzero remainder.", "Forgetting that prime/composite only applies to integers greater than 1.", "Not stating why a multiplier is an integer in divisibility proofs."],
+      firstMove: "Rewrite the statement using definitions: a divides b means b = ak.",
+      scoreTip: "Show every Euclidean division line. Arithmetic work is the solution in gcd questions."
+    },
+    "combinatorics": {
+      cues: ["how many", "order matters", "repetition allowed", "at least one", "forbidden substring", "pigeonhole", "cards"],
+      attack: ["Ask whether order matters.", "Ask whether repetition is allowed.", "Separate restrictions from the unrestricted total.", "Use complement for 'at least one' or forbidden cases.", "For pigeonhole, name objects and boxes."],
+      mistakes: ["Using n! automatically.", "Counting ordered arrangements when the question asks for sets/hands.", "Forgetting to subtract forbidden cases.", "Choosing the wrong pigeonholes."],
+      firstMove: "Write four words: order? repetition? restriction? complement?",
+      scoreTip: "A clear counting expression often earns points even if the final arithmetic is unfinished."
+    },
+    "induction-recurrence": {
+      cues: ["prove for all n", "base step", "inductive hypothesis", "recurrence", "initial conditions", "bit strings"],
+      attack: ["Write the base case.", "Write the inductive hypothesis exactly.", "Write the k+1 target before simplifying.", "For sums, split the new sum into old sum plus new term.", "For recurrences, compute initial values before guessing a formula."],
+      mistakes: ["Assuming the k+1 statement.", "Forgetting the starting value of n.", "Not using the inductive hypothesis.", "Solving a recurrence without initial conditions."],
+      firstMove: "Write three lines: Base, Assume P(k), Need P(k+1).",
+      scoreTip: "The target line is worth time. If the algebra gets messy, the grader still sees the correct proof structure."
+    },
+    "binomial-polynomials": {
+      cues: ["expand", "Pascal triangle", "coefficient", "root", "factor", "remainder", "polynomial"],
+      attack: ["For expansions, write the coefficient row first.", "Track signs separately from powers.", "For one coefficient, write the general term and match exponents.", "For factor/root questions, substitute the candidate value.", "Use remainder theorem instead of long division when possible."],
+      mistakes: ["Losing minus signs in odd powers.", "Expanding the whole expression when only one coefficient is needed.", "Plugging +a for x+a instead of -a.", "Forgetting Pascal coefficients."],
+      firstMove: "Write the binomial row or plug the proposed root before doing anything else.",
+      scoreTip: "For signed cubics, make a four-term template first, then fill signs and coefficients."
+    },
+    "algorithms-growth": {
+      cues: ["trace code", "for_all", "exists", "Big-O", "nested loop", "linear search", "one-to-one code", "onto code"],
+      attack: ["For code tracing, make a variable table.", "For quantifier functions, stop at the first witness or counterexample.", "For Big-O, expand only enough to find the dominant term.", "For loops, ask whether they are sequential, nested, or halving.", "For mapping code, compute values, set(values), and codomain comparison."],
+      mistakes: ["Guessing code output without a table.", "Treating sequential loops like nested loops.", "Keeping constants in Big-O.", "Forgetting that exists over an empty list is false."],
+      firstMove: "Make a trace table or identify the dominant term. Do not do both at once.",
+      scoreTip: "Write the intermediate values the code asks for; exams often award points before the final True/False."
+    }
+  };
 
   function topicById(id) {
     return data.topics.find((topic) => topic.id === id) || data.topics[0];
@@ -467,6 +532,88 @@
               </ol>
               <div class="exam-answer"><strong>Remember:</strong> ${problem.remember}</div>
             </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderExamCoach(topic) {
+    const coach = examCoach[topic.id];
+    if (!coach) return "";
+
+    return `
+      <section class="panel pass-panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-danger">Pass the exam</div>
+            <h2>What to do when this topic appears</h2>
+            <p class="lead">This is the shortest route from seeing the question to writing a point-scoring answer.</p>
+          </div>
+        </div>
+        <div class="pass-grid">
+          <article class="pass-card">
+            <h3>Exam cues</h3>
+            <div class="concept-row">
+              ${coach.cues.map((cue) => `<span>${cue}</span>`).join("")}
+            </div>
+          </article>
+          <article class="pass-card">
+            <h3>Attack order</h3>
+            <ol class="compact-steps">
+              ${coach.attack.map((step) => `<li>${step}</li>`).join("")}
+            </ol>
+          </article>
+          <article class="pass-card">
+            <h3>Common mistakes</h3>
+            <ul class="mistake-list">
+              ${coach.mistakes.map((mistake) => `<li>${mistake}</li>`).join("")}
+            </ul>
+          </article>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderExactQuestionTrainer(topic) {
+    const coach = examCoach[topic.id];
+    const questions = (data.examQuestions || []).filter((item) => item.topicId === topic.id);
+    if (!coach || !questions.length) return "";
+
+    return `
+      <section class="panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-navy">Exact exam trainer</div>
+            <h2>Old questions for this topic</h2>
+            <p class="lead">Use these as your exam checklist. Try each one first, then compare your first move with the guide.</p>
+          </div>
+          <div class="module-count-card">
+            <strong>${questions.length}</strong>
+            <span>old questions</span>
+          </div>
+        </div>
+        <div class="exam-trainer-list">
+          ${questions.map((item) => `
+            <details class="exam-trainer-card">
+              <summary>
+                <span>${item.date} — ${item.part}</span>
+                <strong>${item.summary}</strong>
+              </summary>
+              <div class="exam-trainer-body">
+                <p><strong>Exact question:</strong> ${item.question}</p>
+                <div class="exam-trainer-guide">
+                  <div>
+                    <span class="badge accent-forest">First move</span>
+                    <p>${coach.firstMove}</p>
+                  </div>
+                  <div>
+                    <span class="badge accent-copper">How to score</span>
+                    <p>${coach.scoreTip}</p>
+                  </div>
+                </div>
+              </div>
+            </details>
           `).join("")}
         </div>
       </section>
@@ -1220,6 +1367,8 @@
       ${renderVisual(topic.visual)}
       ${renderVerySoftStartPath(topic)}
       ${topic.id === "exam-map" ? renderExamMap() : ""}
+      ${renderExamCoach(topic)}
+      ${renderExactQuestionTrainer(topic)}
       ${renderBeginnerGuide(topic)}
       ${renderFormulaBank(topic)}
       ${renderProblemSolving(topic)}

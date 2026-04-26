@@ -1,7 +1,7 @@
 window.examStudio = {
   stats: [
     ["10 exams mapped", "2023-03-24 through 2026-03-26"],
-    ["12 study modules", "soft start, fundamentals, 9 exam-core topics, and exam map"],
+    ["14 study modules", "soft start, fundamentals, 9 exam-core topics, probability, state machines, and exam map"],
     ["Exam-style practice", "worked examples, memory cards, multiple-choice checks"],
     ["Beginner-first", "plain English, visuals, and step-by-step solutions"]
   ],
