@@ -598,6 +598,7 @@
           ${questions.map((item) => `
             ${(() => {
               const solution = solutionMap.get(`${item.date}-${item.part}`);
+              const subquestions = examSubquestions(item.question);
               return `
             <details class="exam-trainer-card">
               <summary>
@@ -605,7 +606,15 @@
                 <strong>${item.summary}</strong>
               </summary>
               <div class="exam-trainer-body">
-                <p><strong>Exact question:</strong> ${item.question}</p>
+                <div class="question-breakdown">
+                  <h4>Question breakdown</h4>
+                  ${subquestions.map((subquestion, index) => `
+                    <div class="subquestion-card">
+                      <span class="badge accent-navy">${subquestions.length > 1 ? `Part ${index + 1}` : "Question"}</span>
+                      <p>${subquestion}</p>
+                    </div>
+                  `).join("")}
+                </div>
                 <div class="exam-trainer-guide">
                   <div>
                     <span class="badge accent-forest">First move</span>
@@ -620,14 +629,14 @@
                   <div class="guided-solution">
                     <h4>Step-by-step solution</h4>
                     ${solution.parts.map((part) => `
-                      <section class="solution-part">
-                        <h5>${part.label}</h5>
+                      <details class="solution-part" open>
+                        <summary>${part.label}</summary>
                         <ol class="solution-list">
                           ${part.steps.map((step) => `<li>${step}</li>`).join("")}
                         </ol>
                         <div class="exam-answer"><strong>Answer:</strong> ${part.answer}</div>
                         ${part.warning ? `<p class="solution-warning"><strong>Common mistake:</strong> ${part.warning}</p>` : ""}
-                      </section>
+                      </details>
                     `).join("")}
                   </div>
                 ` : `
@@ -641,6 +650,20 @@
         </div>
       </section>
     `;
+  }
+
+  function examSubquestions(question) {
+    const cleaned = question.replace(/\s+/g, " ").trim();
+    const matches = [...cleaned.matchAll(/(?:^|\s)([abcdi]+)\)\s/g)];
+    if (matches.length < 2) return [cleaned];
+
+    return matches.map((match, index) => {
+      const start = match.index + (match[0].startsWith(" ") ? 1 : 0);
+      const end = index + 1 < matches.length
+        ? matches[index + 1].index + (matches[index + 1][0].startsWith(" ") ? 1 : 0)
+        : cleaned.length;
+      return cleaned.slice(start, end).trim();
+    });
   }
 
   function renderMemoryQuiz(topic) {
