@@ -942,17 +942,80 @@ window.examStudio.examSolutions = [
     part: "Q1",
     parts: [
       {
-        label: "Logic expression, contradiction proof, quantifier code",
+        label: "Part A) Translate the graduation sentence",
         steps: [
-          "'g only if r and not m and not b' translates as $g\\to(r\\land\\neg m\\land\\neg b)$.",
-          "For $\\sqrt2$ irrational, assume $\\sqrt2=a/b$ in lowest terms.",
-          "Then $2=a^2/b^2$, so $a^2=2b^2$, hence a is even.",
-          "Write $a=2k$, then $4k^2=2b^2$, so $b^2=2k^2$, hence b is even.",
-          "Both a and b even contradict lowest terms.",
-          "For `for_all`, return False at the first counterexample; for `exists`, return True at the first witness."
+          "First write what each letter means: g = you can graduate, r = requirements completed, m = you owe money, b = overdue library book.",
+          "The sentence says: 'You can graduate only if ...'.",
+          "In logic, 'P only if Q' means $P\\to Q$.",
+          "Here P is g.",
+          "The required condition Q has three parts: completed requirements, do not owe money, and no overdue book.",
+          "That becomes $r\\land\\neg m\\land\\neg b$.",
+          "Put them together: $g\\to(r\\land\\neg m\\land\\neg b)$."
         ],
-        answer: "$g\\to(r\\land\\neg m\\land\\neg b)$; $\\sqrt2$ is irrational; trace quantifier code by witness/counterexample.",
-        warning: "'Only if' points from the permission/claim to the required conditions."
+        answer: "$g\\to(r\\land\\neg m\\land\\neg b)$.",
+        warning: "Do not reverse 'only if'. The sentence does not say $r\\land\\neg m\\land\\neg b\\to g$."
+      },
+      {
+        label: "Part B) Prove $\\sqrt2$ is irrational by contradiction",
+        steps: [
+          "A proof by contradiction starts by assuming the opposite of what we want.",
+          "Assume $\\sqrt2$ is rational.",
+          "Then $\\sqrt2=\\frac ab$ for integers a and b, with the fraction written in lowest terms.",
+          "Square both sides: $2=\\frac{a^2}{b^2}$.",
+          "Multiply by $b^2$: $a^2=2b^2$.",
+          "This means $a^2$ is even, so a is even.",
+          "Write $a=2k$.",
+          "Substitute: $(2k)^2=2b^2$, so $4k^2=2b^2$.",
+          "Divide by 2: $b^2=2k^2$.",
+          "So $b^2$ is even, which means b is even.",
+          "Now both a and b are even, so the fraction $\\frac ab$ was not in lowest terms.",
+          "That contradicts our assumption. Therefore $\\sqrt2$ is irrational."
+        ],
+        answer: "$\\sqrt2$ is irrational.",
+        warning: "The contradiction is not just 'a and b are even'; it is that a and b are even even though the fraction was chosen in lowest terms."
+      },
+      {
+        label: "Part C-i) Trace `for_all(numbers, is_even)`",
+        steps: [
+          "The list is `[4, 7, 2, 9, 6]`.",
+          "`for_all` checks whether every element passes the predicate.",
+          "The predicate is `is_even(x)`, meaning x is even.",
+          "First iteration: x = 4. `is_even(4)` is True, so the loop continues.",
+          "Second iteration: x = 7. `is_even(7)` is False.",
+          "`for_all` returns False immediately when it finds the first counterexample.",
+          "The function stops at 7 and does not need to check 2, 9, or 6."
+        ],
+        answer: "It returns `False` at element `7`.",
+        warning: "`for_all` does not count how many values pass. One counterexample is enough."
+      },
+      {
+        label: "Part C-ii) Trace `exists(numbers, lambda x: x > 10)`",
+        steps: [
+          "`exists` checks whether at least one element passes the predicate.",
+          "The predicate is `x > 10`.",
+          "Check the list: 4 is not greater than 10.",
+          "7 is not greater than 10.",
+          "2 is not greater than 10.",
+          "9 is not greater than 10.",
+          "6 is not greater than 10.",
+          "No witness is found."
+        ],
+        answer: "It returns `False`.",
+        warning: "`exists` needs one successful witness. If none is found, it returns False."
+      },
+      {
+        label: "Part C-iii) Empty-list behavior",
+        steps: [
+          "`for_all([], is_even)` has no elements to check.",
+          "It never finds a counterexample.",
+          "So `for_all([], is_even)` returns True.",
+          "`exists([], is_even)` also has no elements to check.",
+          "It never finds a witness.",
+          "So `exists([], is_even)` returns False.",
+          "This matches logic: a universal statement over an empty set is vacuously true, but an existential statement over an empty set is false."
+        ],
+        answer: "`for_all([], is_even)` returns `True`; `exists([], is_even)` returns `False`.",
+        warning: "Empty lists are exam traps: universal and existential checks behave differently."
       }
     ]
   },
