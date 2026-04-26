@@ -24,6 +24,9 @@
     learning: 0
   };
   const hintState = new Map(); // qIndex -> shown
+  const labState = new Map();
+  const adaptiveStoreKey = "exam-studio-adaptive-v1";
+  const adaptiveState = loadAdaptiveState();
   const examCoach = {
     "logic-proofs": {
       cues: ["Truth table", "tautology / contradiction", "proof sequence", "negate implication", "contradiction proof"],
@@ -89,6 +92,195 @@
       scoreTip: "Write the intermediate values the code asks for; exams often award points before the final True/False."
     }
   };
+
+  const learningLabs = {
+    "predicate-quantifiers": {
+      badge: "Quantifier lab",
+      title: "Translate before you solve",
+      intro: "Pick the logical skeleton first. The feedback explains the tempting wrong move.",
+      type: "choice",
+      items: [
+        {
+          concept: "universal-implication",
+          prompt: "All students who pass practiced old exams.",
+          ask: "Which formula has the right skeleton?",
+          options: [
+            "$\\forall x((Student(x) \\land Passed(x)) \\to PracticedOldExams(x))$",
+            "$\\forall x(Student(x) \\land Passed(x) \\land PracticedOldExams(x))$",
+            "$\\exists x((Student(x) \\land Passed(x)) \\to PracticedOldExams(x))$"
+          ],
+          answer: 0,
+          why: "A universal restriction uses implication: if x is a passing student, then x practiced old exams.",
+          trap: "The AND version says every object is a student, passed, and practiced. That is much stronger than the English sentence."
+        },
+        {
+          concept: "existential-and",
+          prompt: "Some lawyer admires only judges.",
+          ask: "Which first move is safest?",
+          options: [
+            "Use $\\exists x$ for the lawyer, then a universal implication for everything they admire.",
+            "Use $\\forall x$ because the word only always means every person.",
+            "Use $Judge(y) \\to Admires(x,y)$ because only judges are admired."
+          ],
+          answer: 0,
+          why: "Some means choose one witness. Only judges means anything admired by that witness must be a judge.",
+          trap: "$Judge(y) \\to Admires(x,y)$ says the lawyer admires all judges. Only judges does not say that."
+        },
+        {
+          concept: "quantifier-negation",
+          prompt: "$\\neg\\forall x\\exists y\\, R(x,y)$",
+          ask: "Push the negation inward.",
+          options: [
+            "$\\exists x\\forall y\\, \\neg R(x,y)$",
+            "$\\forall x\\exists y\\, \\neg R(x,y)$",
+            "$\\exists x\\exists y\\, \\neg R(x,y)$"
+          ],
+          answer: 0,
+          why: "Each time NOT crosses a quantifier, it flips it: not-for-all becomes exists, not-exists becomes for-all.",
+          trap: "Changing only the predicate is not enough. The quantifiers must flip one layer at a time."
+        }
+      ]
+    },
+    "combinatorics": {
+      badge: "Combinatorics classifier",
+      title: "Choose the counting method first",
+      intro: "Classify the task before calculating. This prevents most exam mistakes in counting questions.",
+      type: "choice",
+      items: [
+        {
+          concept: "combination",
+          prompt: "A hockey team chooses 5 players from 27 for a line.",
+          ask: "What is the method?",
+          options: ["Combination: $\\binom{27}{5}$", "Permutation: $P(27,5)$", "Repetition: $27^5$"],
+          answer: 0,
+          why: "A selected line is a group. The order of the names does not create a new line.",
+          trap: "Using a permutation counts the same five players many times in different orders."
+        },
+        {
+          concept: "multiplication-rule",
+          prompt: "Three dice are rolled and the last roll must be even.",
+          ask: "What should you count?",
+          options: ["Ordered outcomes: $6\\cdot6\\cdot3$", "Unordered sets: $\\binom63$", "Only even triples: $3^3$"],
+          answer: 0,
+          why: "Roll order matters, and only the final position is restricted to 2, 4, or 6.",
+          trap: "$3^3$ incorrectly makes every roll even."
+        },
+        {
+          concept: "complement",
+          prompt: "How many bit strings of length 8 contain at least one 1?",
+          ask: "What is the cleanest method?",
+          options: ["Complement: all strings minus the all-zero string", "Permutation: $8!$", "Pigeonhole principle"],
+          answer: 0,
+          why: "At least one is often easiest by subtracting the one forbidden case from all $2^8$ strings.",
+          trap: "Permutation is about arranging distinct objects. Bit strings allow repeated 0s and 1s."
+        }
+      ]
+    },
+    "induction-recurrence": {
+      badge: "Induction builder",
+      title: "Build the proof skeleton",
+      intro: "Choose the line that belongs in each proof slot. The goal is structure before algebra.",
+      type: "builder",
+      concept: "induction-template",
+      statement: "Prove $1+2+\\cdots+n=\\frac{n(n+1)}2$ for all $n\\ge1$.",
+      slots: [
+        {
+          key: "base",
+          label: "Base case",
+          answer: 0,
+          options: [
+            "For $n=1$: $1=\\frac{1(1+1)}2=1$.",
+            "Assume the formula is true for $n=k$.",
+            "Therefore it is true for every integer."
+          ]
+        },
+        {
+          key: "hypothesis",
+          label: "Inductive hypothesis",
+          answer: 1,
+          options: [
+            "Prove $1+2+\\cdots+(k+1)=\\frac{(k+1)(k+2)}2$.",
+            "Assume $1+2+\\cdots+k=\\frac{k(k+1)}2$ for some $k\\ge1$.",
+            "Check $n=2$ only."
+          ]
+        },
+        {
+          key: "target",
+          label: "Target",
+          answer: 0,
+          options: [
+            "Need $1+2+\\cdots+k+(k+1)=\\frac{(k+1)(k+2)}2$.",
+            "Need $1+2+\\cdots+k=\\frac{k(k+1)}2$.",
+            "Need $k=1$."
+          ]
+        },
+        {
+          key: "use-ih",
+          label: "Use the hypothesis",
+          answer: 2,
+          options: [
+            "$\\frac{(k+1)(k+2)}2 + (k+1)$",
+            "$1+2+\\cdots+k+(k+1)=k+(k+1)$",
+            "$1+2+\\cdots+k+(k+1)=\\frac{k(k+1)}2+(k+1)$"
+          ]
+        },
+        {
+          key: "final",
+          label: "Final form",
+          answer: 1,
+          options: [
+            "$\\frac{k(k+1)}2+(k+1)=\\frac{k(k+1)}2$",
+            "$\\frac{k(k+1)}2+(k+1)=\\frac{(k+1)(k+2)}2$",
+            "$\\frac{k(k+1)}2+(k+1)=\\frac{k(k+2)}2$"
+          ]
+        }
+      ]
+    }
+  };
+
+  function loadAdaptiveState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(adaptiveStoreKey) || "{}");
+      return {
+        wrongByConcept: parsed.wrongByConcept || {},
+        completedTopics: parsed.completedTopics || {},
+        quizScores: parsed.quizScores || {},
+        confidence: parsed.confidence || {},
+        memoryCards: parsed.memoryCards || {}
+      };
+    } catch (error) {
+      return { wrongByConcept: {}, completedTopics: {}, quizScores: {}, confidence: {}, memoryCards: {} };
+    }
+  }
+
+  function saveAdaptiveState() {
+    localStorage.setItem(adaptiveStoreKey, JSON.stringify(adaptiveState));
+  }
+
+  function conceptKey(topicId, concept) {
+    return `${topicId}:${concept || "general"}`;
+  }
+
+  function recordConceptResult(topicId, concept, correct) {
+    const key = conceptKey(topicId, concept);
+    if (correct) {
+      adaptiveState.completedTopics[topicId] = true;
+    } else {
+      adaptiveState.wrongByConcept[key] = (adaptiveState.wrongByConcept[key] || 0) + 1;
+    }
+    saveAdaptiveState();
+  }
+
+  function adaptiveMessage(topicId, concept, fallbackReview) {
+    const wrong = adaptiveState.wrongByConcept[conceptKey(topicId, concept)] || 0;
+    if (wrong >= 3) {
+      return `<div class="adaptive-callout strong"><strong>Review now:</strong> You have missed this concept ${wrong} times. Go back to ${fallbackReview || "the Exam method and worked examples"} before doing more exam questions.</div>`;
+    }
+    if (wrong >= 2) {
+      return `<div class="adaptive-callout"><strong>Pattern detected:</strong> This concept has caused two misses. Read the worked example, then retry a similar question before moving on.</div>`;
+    }
+    return "";
+  }
 
   function topicById(id) {
     return data.topics.find((topic) => topic.id === id) || data.topics[0];
@@ -575,6 +767,104 @@
     `;
   }
 
+  function renderLearningLab(topic) {
+    const lab = learningLabs[topic.id];
+    if (!lab) return "";
+    const state = labState.get(topic.id) || {};
+
+    if (lab.type === "builder") {
+      const answeredSlots = lab.slots.filter((slot) => state[slot.key] !== undefined);
+      const correctSlots = answeredSlots.filter((slot) => state[slot.key] === slot.answer).length;
+      return `
+        <section class="panel learning-lab">
+          <div class="module-path-header">
+            <div>
+              <div class="badge accent-forest">${lab.badge}</div>
+              <h2>${lab.title}</h2>
+              <p class="lead">${lab.intro}</p>
+            </div>
+            <span class="quiz-chip">Built <strong>${correctSlots} / ${lab.slots.length}</strong></span>
+          </div>
+          <div class="lab-prompt">${lab.statement}</div>
+          <div class="lab-builder-grid">
+            ${lab.slots.map((slot) => {
+              const selected = state[slot.key];
+              const answered = selected !== undefined;
+              const correct = selected === slot.answer;
+              return `
+                <article class="lab-card">
+                  <h3>${slot.label}</h3>
+                  <div class="options">
+                    ${slot.options.map((option, optionIndex) => {
+                      const className = answered
+                        ? optionIndex === slot.answer
+                          ? "option show-correct"
+                          : optionIndex === selected
+                            ? "option wrong"
+                            : "option"
+                        : "option";
+                      return `<button class="${className}" data-lab-builder="${slot.key}" data-lab-choice="${optionIndex}" ${answered ? "disabled" : ""}>${option}</button>`;
+                    }).join("")}
+                  </div>
+                  ${answered ? `
+                    <div class="feedback ${correct ? "correct" : "wrong"}">
+                      ${correct ? "<strong>Correct.</strong>" : "<strong>Not quite.</strong>"} ${correct ? "This line belongs in that slot." : "That line changes the proof role. Match the wording to the slot name."}
+                    </div>
+                  ` : ""}
+                </article>
+              `;
+            }).join("")}
+          </div>
+          ${adaptiveMessage(topic.id, lab.concept, "the induction template and exact old exam solutions")}
+        </section>
+      `;
+    }
+
+    return `
+      <section class="panel learning-lab">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-forest">${lab.badge}</div>
+            <h2>${lab.title}</h2>
+            <p class="lead">${lab.intro}</p>
+          </div>
+        </div>
+        <div class="lab-grid">
+          ${lab.items.map((item, itemIndex) => {
+            const answered = state[itemIndex];
+            const correct = answered === item.answer;
+            return `
+              <article class="lab-card">
+                <div class="badge accent-navy">${item.concept.replaceAll("-", " ")}</div>
+                <h3>${item.prompt}</h3>
+                <p class="quiz-hint">${item.ask}</p>
+                <div class="options">
+                  ${item.options.map((option, optionIndex) => {
+                    const className = answered !== undefined
+                      ? optionIndex === item.answer
+                        ? "option show-correct"
+                        : optionIndex === answered
+                          ? "option wrong"
+                          : "option"
+                      : "option";
+                    return `<button class="${className}" data-lab-item="${itemIndex}" data-lab-choice="${optionIndex}" ${answered !== undefined ? "disabled" : ""}>${option}</button>`;
+                  }).join("")}
+                </div>
+                ${answered !== undefined ? `
+                  <div class="feedback ${correct ? "correct" : "wrong"}">
+                    ${correct ? "<strong>Correct.</strong>" : "<strong>Not quite.</strong>"} ${item.why}
+                    <div class="lab-trap"><strong>Trap:</strong> ${item.trap}</div>
+                  </div>
+                  ${adaptiveMessage(topic.id, item.concept, "this lab and the exact exam trainer")}
+                ` : ""}
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderExactQuestionTrainer(topic) {
     const coach = examCoach[topic.id];
     const questions = (data.examQuestions || []).filter((item) => item.topicId === topic.id);
@@ -628,16 +918,25 @@
                 ${solution ? `
                   <div class="guided-solution">
                     <h4>Step-by-step solution</h4>
-                    ${solution.parts.map((part) => `
+                    ${solution.parts.map((rawPart, partIndex) => {
+                      const part = normalizeSolutionPart(rawPart, topic, item, subquestions[partIndex]);
+                      return `
                       <details class="solution-part" open>
                         <summary>${part.label}</summary>
+                        <div class="try-first">
+                          <strong>Try first:</strong> ${part.tryFirst}
+                        </div>
+                        <p><strong>Question:</strong> ${part.question}</p>
+                        <p><strong>Method:</strong> ${part.method}</p>
                         <ol class="solution-list">
                           ${part.steps.map((step) => `<li>${step}</li>`).join("")}
                         </ol>
                         <div class="exam-answer"><strong>Answer:</strong> ${part.answer}</div>
                         ${part.warning ? `<p class="solution-warning"><strong>Common mistake:</strong> ${part.warning}</p>` : ""}
+                        <div class="exam-answer"><strong>Exam answer format:</strong> ${part.examFormat}</div>
+                        <div class="similar-retry"><strong>Similar retry:</strong> ${part.retry}</div>
                       </details>
-                    `).join("")}
+                    `; }).join("")}
                   </div>
                 ` : `
                   <div class="exam-answer"><strong>Solution status:</strong> This question is included and mapped. A full worked solution has not been written yet.</div>
@@ -650,6 +949,55 @@
         </div>
       </section>
     `;
+  }
+
+  function normalizeSolutionPart(part, topic, examItem, fallbackQuestion) {
+    return {
+      label: part.label || "Part",
+      question: part.question || fallbackQuestion || examItem.question || examItem.summary,
+      method: part.method || inferMethod(part, topic),
+      steps: part.steps?.length ? part.steps : ["Identify the requested object.", "Apply the topic method.", "Write the final answer in exam notation."],
+      answer: part.answer || "See the final line of the worked solution.",
+      warning: part.warning || "Do not skip the reason for the method you chose.",
+      tryFirst: part.tryFirst || inferTryFirst(part, topic),
+      retry: part.retry || inferRetry(part, topic),
+      examFormat: part.examFormat || inferExamFormat(topic)
+    };
+  }
+
+  function inferMethod(part, topic) {
+    const text = `${part.label || ""} ${(part.steps || []).join(" ")}`.toLowerCase();
+    if (topic.id === "predicate-quantifiers" || text.includes("quantifier")) return "Define predicates, choose the quantifier skeleton, then choose implication or AND.";
+    if (topic.id === "combinatorics" || text.includes("choose") || text.includes("outcomes")) return "Classify order, repetition, and restrictions before writing the counting expression.";
+    if (topic.id === "induction-recurrence" || text.includes("induct")) return "Write Base, Hypothesis, Target, Use IH, then simplify to the target.";
+    if (topic.id === "relations-graphs" || text.includes("graph")) return "List the objects first, then test the requested property directly from the definition.";
+    if (topic.id === "logic-proofs" || text.includes("truth")) return "Work from the main connective inward, or build one legal proof-rule step at a time.";
+    return "Name the relevant definition or formula first, then apply it step by step.";
+  }
+
+  function inferTryFirst(part, topic) {
+    if (topic.id === "predicate-quantifiers") return "Which keyword decides the skeleton: all, some, no, only, or not all?";
+    if (topic.id === "combinatorics") return "Ask: does order matter, is repetition allowed, and is a complement easier?";
+    if (topic.id === "induction-recurrence") return "Write the exact $P(k+1)$ target before doing algebra.";
+    if (topic.id === "relations-graphs") return "Which definition is being tested: reflexive, symmetric, transitive, connected, degree, or complete?";
+    if (topic.id === "logic-proofs") return "What is the first legal rule: De Morgan, implication rewrite, MP, MT, or truth table column?";
+    return "What is the first definition, formula, or rule that applies?";
+  }
+
+  function inferRetry(part, topic) {
+    if (topic.id === "predicate-quantifiers") return "Change 'all' to 'some' or add a negation, then write the new skeleton before checking.";
+    if (topic.id === "combinatorics") return "Change one restriction, such as 'last is even' to 'first is even', and recount.";
+    if (topic.id === "induction-recurrence") return "Use the same five slots on $1+3+5+\\cdots+(2n-1)=n^2$.";
+    if (topic.id === "relations-graphs") return "Add or remove one pair/edge and retest the same property.";
+    return "Change one number or symbol in the question and repeat the same method.";
+  }
+
+  function inferExamFormat(topic) {
+    if (topic.id === "predicate-quantifiers") return "Predicate definitions first, then one clean formula.";
+    if (topic.id === "combinatorics") return "One classification sentence, one counting expression, then the simplified number.";
+    if (topic.id === "induction-recurrence") return "Label Base, IH, Target, Use IH, Conclusion.";
+    if (topic.id === "relations-graphs") return "State the property result and justify it with the exact pair, edge, path, or counterexample.";
+    return "Show the rule used on each line and box the final result.";
   }
 
   function examSubquestions(question) {
@@ -1015,7 +1363,7 @@
 
   function getPracticeState(topic) {
     if (!quizState.has(topic.id)) {
-      quizState.set(topic.id, { answered: new Map(), score: 0 });
+      quizState.set(topic.id, { answered: new Map(), confidence: new Map(), score: 0 });
     }
     return quizState.get(topic.id);
   }
@@ -1039,6 +1387,7 @@
         <div class="quiz-list">
           ${practiceItems.map((item, qIndex) => {
             const answered = state.answered.get(qIndex);
+            const confidence = state.confidence.get(qIndex) || "medium";
             const hintShown = topicHints.get(qIndex);
             const diffClass = item.difficulty === "easy" ? "badge-easy" : item.difficulty === "exam" ? "badge-exam" : "badge-medium";
             return `
@@ -1048,6 +1397,13 @@
                   ${item.difficulty ? `<div class="badge ${diffClass}">${item.difficulty}</div>` : ""}
                 </div>
                 <h3>${qIndex + 1}. ${item.q}</h3>
+                ${!answered ? `
+                  <div class="confidence-row" aria-label="Confidence before answering">
+                    ${["low", "medium", "high"].map((level) => `
+                      <button class="confidence-btn ${confidence === level ? "is-active" : ""}" data-confidence="${qIndex}" data-confidence-level="${level}">${level}</button>
+                    `).join("")}
+                  </div>
+                ` : ""}
                 ${!answered && item.hint ? `
                   ${hintShown
                     ? `<div class="hint-box">Hint: ${item.hint}</div>`
@@ -1066,7 +1422,13 @@
                     return `<button class="${className}" data-practice="${qIndex}" data-choice="${optionIndex}" ${answered ? "disabled" : ""}>${option}</button>`;
                   }).join("")}
                 </div>
-                ${answered ? `<div class="feedback ${answered.correct ? "correct" : "wrong"}">${answered.correct ? "<strong>Correct.</strong>" : "<strong>Not quite.</strong>"} ${item.why}</div>` : ""}
+                ${answered ? `
+                  <div class="feedback ${answered.correct ? "correct" : "wrong"}">
+                    ${answered.correct ? "<strong>Correct.</strong>" : "<strong>Not quite.</strong>"} ${item.why}
+                    ${answered.confidence === "high" && !answered.correct ? `<div class="dangerous-mistake"><strong>Dangerous mistake:</strong> you felt confident but chose the wrong method. Slow down and name the rule before calculating.</div>` : ""}
+                  </div>
+                  ${adaptiveMessage(topic.id, item.concept || item.difficulty || "practice", "the exact exam trainer for this topic")}
+                ` : ""}
               </article>
             `;
           }).join("")}
@@ -1411,6 +1773,7 @@
       </section>
 
       ${renderVisual(topic.visual)}
+      ${renderLearningLab(topic)}
       ${renderVerySoftStartPath(topic)}
       ${topic.id === "exam-map" ? renderExamMap() : ""}
       ${renderExamCoach(topic)}
@@ -1454,6 +1817,17 @@
     });
 
     /* ── Practice quiz answers ──────────────────────────── */
+    root.querySelectorAll("[data-confidence]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const qIndex = Number(button.dataset.confidence);
+        const state = getPracticeState(topic);
+        state.confidence.set(qIndex, button.dataset.confidenceLevel);
+        adaptiveState.confidence[`${topic.id}:${qIndex}`] = button.dataset.confidenceLevel;
+        saveAdaptiveState();
+        renderTopic(topic);
+      });
+    });
+
     root.querySelectorAll("[data-practice]").forEach((button) => {
       button.addEventListener("click", () => {
         const qIndex = Number(button.dataset.practice);
@@ -1462,9 +1836,43 @@
         const state = getPracticeState(topic);
         const correct = choice === current.answer;
         if (!state.answered.has(qIndex)) {
-          state.answered.set(qIndex, { choice, correct });
+          const confidence = state.confidence.get(qIndex) || "medium";
+          state.answered.set(qIndex, { choice, correct, confidence });
           if (correct) state.score += 1;
+          adaptiveState.quizScores[topic.id] = { score: state.score, answered: state.answered.size };
+          recordConceptResult(topic.id, current.concept || current.difficulty || "practice", correct);
         }
+        renderTopic(topic);
+        if (window.refreshMath) window.refreshMath();
+      });
+    });
+
+    /* ── Interactive learning labs ──────────────────────── */
+    root.querySelectorAll("[data-lab-item]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const lab = learningLabs[topic.id];
+        const itemIndex = Number(button.dataset.labItem);
+        const choice = Number(button.dataset.labChoice);
+        const item = lab.items[itemIndex];
+        const state = labState.get(topic.id) || {};
+        state[itemIndex] = choice;
+        labState.set(topic.id, state);
+        recordConceptResult(topic.id, item.concept, choice === item.answer);
+        renderTopic(topic);
+        if (window.refreshMath) window.refreshMath();
+      });
+    });
+
+    root.querySelectorAll("[data-lab-builder]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const lab = learningLabs[topic.id];
+        const slotKey = button.dataset.labBuilder;
+        const choice = Number(button.dataset.labChoice);
+        const slot = lab.slots.find((candidate) => candidate.key === slotKey);
+        const state = labState.get(topic.id) || {};
+        state[slotKey] = choice;
+        labState.set(topic.id, state);
+        recordConceptResult(topic.id, lab.concept, choice === slot.answer);
         renderTopic(topic);
         if (window.refreshMath) window.refreshMath();
       });
@@ -1473,6 +1881,7 @@
     root.querySelectorAll("[data-topic-link]").forEach((button) => {
       button.addEventListener("click", () => {
         activeTopicId = button.dataset.topicLink;
+        history.replaceState(null, "", `#${activeTopicId}`);
         render();
       });
     });
