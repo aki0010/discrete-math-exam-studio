@@ -1143,6 +1143,7 @@
 
   function renderExamMap() {
     const topics = new Map(data.topics.map((topic) => [topic.id, topic.short]));
+    const exactQuestions = data.examQuestions || [];
     return `
       <section class="panel">
         <h2>Every old exam part mapped</h2>
@@ -1163,6 +1164,32 @@
           </table>
         </div>
       </section>
+      ${exactQuestions.length ? `
+        <section class="panel">
+          <div class="module-path-header">
+            <div>
+              <div class="badge accent-copper">Exact old exam questions</div>
+              <h2>All PDF questions included</h2>
+              <p class="lead">These are the extracted main questions from the 10 old exam PDFs. Use them to check that no exam part is missing.</p>
+            </div>
+            <div class="module-count-card">
+              <strong>${exactQuestions.length}</strong>
+              <span>exam questions</span>
+            </div>
+          </div>
+          <div class="example-stack">
+            ${exactQuestions.map((item) => `
+              <article class="example-card">
+                <div class="badge accent-navy">${item.date} — ${item.part}</div>
+                <h3>${topics.get(item.topicId) || item.topicId}</h3>
+                <p><strong>Mapped topic:</strong> ${item.summary}</p>
+                <p>${item.question}</p>
+                <button class="link-btn" data-topic-link="${item.topicId}">Study this topic</button>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      ` : ""}
     `;
   }
 
