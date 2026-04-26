@@ -1,0 +1,13 @@
+.DS_Store
+*.PDF
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.py
+logic/
+matte-discrete-basic/
+a very soft start/
+patch_*.py
+temp_*.js
+all_notes.txt

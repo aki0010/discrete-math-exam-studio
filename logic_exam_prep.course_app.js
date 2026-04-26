@@ -1,0 +1,1330 @@
+(() => {
+  const data = window.examStudio;
+  const legacy = window.logicPrepData || {};
+  if (!data) return;
+
+  const root = document.getElementById("app-root");
+  const nav = document.getElementById("topic-nav");
+  const stats = document.getElementById("hero-stats");
+  const route = document.getElementById("study-route");
+
+  const hashTopicId = window.location.hash.replace("#", "");
+  let activeTopicId = data.topics.some((topic) => topic.id === hashTopicId)
+    ? hashTopicId
+    : data.topics.some((topic) => topic.id === "math-fundamentals")
+      ? "math-fundamentals"
+      : data.topics[0]?.id;
+  const quizState = new Map();
+  const visitedTopics = new Set();
+  const lawTrainerState = {
+    category: "exam-core",
+    index: 0,
+    revealed: false,
+    known: 0,
+    learning: 0
+  };
+  const hintState = new Map(); // qIndex -> shown
+
+  function topicById(id) {
+    return data.topics.find((topic) => topic.id === id) || data.topics[0];
+  }
+
+  function orderedTopics() {
+    const priority = ["math-fundamentals", "very-soft-start"];
+    const byId = new Map(data.topics.map((topic) => [topic.id, topic]));
+    return [
+      ...priority.map((id) => byId.get(id)).filter(Boolean),
+      ...data.topics.filter((topic) => !priority.includes(topic.id))
+    ];
+  }
+
+  function lawCards() {
+    return (legacy.lawGroups || []).flatMap((group) =>
+      group.rows.map((row, index) => ({
+        id: `${group.title}-${index}`,
+        family: group.family,
+        title: group.title,
+        source: group.source,
+        name: row[0],
+        prompt: row[1],
+        answer: row[2],
+        cue: row[3]
+      }))
+    );
+  }
+
+  function legacyPracticeForTopic(topic) {
+    const categoryMap = {
+      "logic-proofs": new Set(["truth", "laws", "proof"]),
+      "predicate-quantifiers": new Set(["translation", "quantifier"])
+    };
+    const allowed = categoryMap[topic.id];
+    if (!allowed) return [];
+
+    return (legacy.drillBank || [])
+      .filter((item) => allowed.has(item.category))
+      .map((item) => ({
+        q: item.question,
+        options: item.options,
+        answer: item.answer,
+        why: item.explanation,
+        legacy: true
+      }));
+  }
+
+  function practiceItemsForTopic(topic) {
+    return [...topic.practiceQuiz, ...legacyPracticeForTopic(topic)];
+  }
+
+  function lawCategoryCards(category) {
+    const cards = lawCards();
+    const examCoreNames = [
+      "Conditional law",
+      "Negated conditional",
+      "Contrapositive",
+      "Biconditional law",
+      "De Morgan",
+      "Modus Ponens (MP)",
+      "Modus Tollens (MT)",
+      "Simplification (Simp)",
+      "Conjunction (Conj)",
+      "Direct negation",
+      "Nested De Morgan",
+      "Tautology",
+      "Contradiction",
+      "Valid argument"
+    ];
+
+    if (category === "exam-core") {
+      return cards.filter((card) => examCoreNames.some((name) => card.name.includes(name))).slice(0, 24);
+    }
+
+    return cards.filter((card) => card.family === category);
+  }
+
+  function lawCategories() {
+    return [
+      ["exam-core", "Exam Core"],
+      ["symbols", "Symbols"],
+      ["propositional", "Rewrites"],
+      ["inference", "Proof Rules"],
+      ["quantifier", "Quantifiers"],
+      ["validity", "Validity"]
+    ];
+  }
+
+  function renderHero() {
+    stats.innerHTML = data.stats.map(([label, detail]) => `
+      <div class="stat-chip">
+        <strong>${label}</strong>
+        <span>${detail}</span>
+      </div>
+    `).join("");
+
+    route.innerHTML = data.route.map((item) => `<li>${item}</li>`).join("");
+  }
+
+  function renderNav() {
+    nav.innerHTML = orderedTopics().map((topic) => {
+      const isActive = topic.id === activeTopicId;
+      const isVisited = visitedTopics.has(topic.id);
+      return `
+        <button class="nav-btn ${isActive ? "is-active" : ""} ${isVisited && !isActive ? "visited" : ""}" data-topic="${topic.id}">
+          ${topic.short}${isVisited && !isActive ? '<span class="nav-check">✓</span>' : ""}
+        </button>
+      `;
+    }).join("");
+
+    nav.querySelectorAll("[data-topic]").forEach((button) => {
+      button.addEventListener("click", () => {
+        activeTopicId = button.dataset.topic;
+        history.replaceState(null, "", `#${activeTopicId}`);
+        render();
+      });
+    });
+  }
+
+  function renderVisual(visual) {
+    const body = {
+      "truth-grid": `
+        <div class="truth-mini">
+          <div>p</div><div>q</div><div>p -> q</div>
+          <div>F</div><div>F</div><div class="truth-true">T</div>
+          <div>F</div><div>T</div><div class="truth-true">T</div>
+          <div>T</div><div>F</div><div class="truth-false">F</div>
+          <div>T</div><div>T</div><div class="truth-true">T</div>
+        </div>
+      `,
+      "quantifier-flow": `
+        <div class="quantifier-visual">
+          <div class="q-column"><strong>$\\forall x\\,\\exists y$</strong><span>$x_1\\to y_1$</span><span>$x_2\\to y_2$</span><span>$x_3\\to y_3$</span></div>
+          <div class="q-column fixed"><strong>$\\exists y\\,\\forall x$</strong><span>$x_1\\to y^*$</span><span>$x_2\\to y^*$</span><span>$x_3\\to y^*$</span></div>
+        </div>
+      `,
+      "mapping": `
+        <div class="mapping-visual">
+          <div><span>a</span><span>b</span><span>c</span></div>
+          <div class="arrows"><span>-></span><span>-></span><span>-></span></div>
+          <div><span>1</span><span>2</span><span>1</span></div>
+        </div>
+      `,
+      "graph": `
+        <div class="graph-visual" aria-label="Triangle graph visual">
+          <span class="node n1">A</span><span class="node n2">B</span><span class="node n3">C</span>
+          <span class="edge e1"></span><span class="edge e2"></span><span class="edge e3"></span>
+        </div>
+      `,
+      "euclid": `
+        <div class="ladder-visual">
+          <div>102 = 2·38 + 26</div>
+          <div>38 = 1·26 + 12</div>
+          <div>26 = 2·12 + 2</div>
+          <div>12 = 6·2 + 0</div>
+        </div>
+      `,
+      "counting-tree": `
+        <div class="decision-visual">
+          <div>Does order matter?</div>
+          <div>Is repetition allowed?</div>
+          <div>Is there a restriction?</div>
+          <strong>Choose formula or cases</strong>
+        </div>
+      `,
+      "domino": `
+        <div class="domino-visual">
+          <span>P(1)</span><span>P(k)</span><span>P(k+1)</span><span>All n</span>
+        </div>
+      `,
+      "pascal": `
+        <div class="pascal-visual">
+          <div>1</div><div>1 1</div><div>1 2 1</div><div>1 3 3 1</div><div>1 4 6 4 1</div>
+        </div>
+      `,
+      "code-trace": `
+        <div class="code-trace-visual">
+          <div><strong>for_all</strong><span>stop at first false</span></div>
+          <div><strong>exists</strong><span>stop at first true</span></div>
+          <div><strong>empty</strong><span>∀ true, ∃ false</span></div>
+        </div>
+      `,
+      "fundamentals-map": `
+        <div class="fundamentals-visual">
+          <div><strong>Symbols</strong><span>$\\in,\\cup,\\cap,\\forall,\\exists,\\sum$</span></div>
+          <div><strong>Sets</strong><span>collections, products, power sets</span></div>
+          <div><strong>Rules</strong><span>commutative, associative, distributive</span></div>
+          <div><strong>Structures</strong><span>functions, relations, graphs</span></div>
+          <div><strong>Numerical</strong><span>$\\lfloor x\\rfloor,\\lceil x\\rceil,n!,\\log_2,\\bmod$</span></div>
+          <div><strong>Logic/Proof</strong><span>$p\\to q$, counterexamples, direct proof</span></div>
+        </div>
+      `,
+      "soft-start-road": `
+        <div class="soft-road-visual">
+          <div><strong>1</strong><span>Read symbols as words</span></div>
+          <div><strong>2</strong><span>Name the object: set, number, function, graph</span></div>
+          <div><strong>3</strong><span>Choose the task: compute, decide, translate, prove, draw</span></div>
+          <div><strong>4</strong><span>Copy the method from a worked example</span></div>
+        </div>
+      `,
+      "exam-timeline": `
+        <div class="timeline-visual">
+          <span>2023</span><span>2024</span><span>2025</span><span>2026</span>
+        </div>
+      `
+    }[visual.type] || "";
+
+    return `
+      <section class="panel visual-panel">
+        <div>
+          <div class="badge accent-navy">Illustration</div>
+          <h2>${visual.title}</h2>
+          <p class="lead">${visual.caption}</p>
+        </div>
+        ${body}
+      </section>
+    `;
+  }
+
+  function renderVerySoftStartPath(topic) {
+    if (topic.id !== "very-soft-start" || !data.verySoftStartPath?.length) return "";
+    const phases = [...new Set(data.verySoftStartPath.map((item) => item.phase))];
+
+    return `
+      <section class="panel soft-deep-dive">
+        <div class="soft-deep-header">
+          <div>
+            <div class="badge accent-forest">Complete soft-start path</div>
+            <h2>Guided problem path</h2>
+            <p class="lead">
+              This section condenses the whole soft-start collection into ordered study cards.
+              Work one phase at a time: understand the problem type, copy the method, then try a similar question.
+            </p>
+          </div>
+          <div class="module-count-card">
+            <strong>${data.verySoftStartPath.length}</strong>
+            <span>guided problem cards</span>
+          </div>
+        </div>
+
+        <div class="soft-phase-stack">
+          ${phases.map((phase) => `
+            <article class="soft-phase">
+              <h3>${phase}</h3>
+              <div class="soft-problem-grid">
+                ${data.verySoftStartPath
+                  .filter((item) => item.phase === phase)
+                  .map((item) => `
+                    <details class="soft-problem-card" open>
+                      <summary>
+                        <span class="problem-number">${item.number}</span>
+                        <span>${item.title}</span>
+                      </summary>
+                      <div class="soft-problem-body">
+                        ${renderSoftProblemVisual(item.visual)}
+                        <p class="soft-problem-text"><strong>Problem:</strong> <span class="formula">${item.problem}</span></p>
+                        ${item.explanation ? `<div class="soft-explanation">${item.explanation}</div>` : ""}
+                        <p class="soft-method-text"><strong>Method:</strong> ${item.method}</p>
+                        <div class="exam-answer"><strong>Remember:</strong> ${item.key}</div>
+                      </div>
+                    </details>
+                  `).join("")}
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSoftProblemVisual(type) {
+    const visual = {
+      area: "<span>$(a+b)^2$</span><span>$a^2$</span><span>$2ab$</span><span>$b^2$</span>",
+      factor: "<span>$a^2-b^2$</span><span>$=$</span><span>$(a-b)(a+b)$</span>",
+      pascal: "<span>1</span><span>1 1</span><span>1 2 1</span><span>1 3 3 1</span>",
+      telescope: "<span>$a^n-b^n$</span><span>middle terms cancel</span><span>$(a-b)(\\cdots)$</span>",
+      string: "<span>$a\\cdots a$</span><span>$k$ factors + $n$ factors</span><span>$a^{k+n}$</span>",
+      sigma: "<span>$\\prod$ = multiply</span><span>$\\sum$ = add</span><span>expand first</span>",
+      pairing: "<span>$1+n$</span><span>$2+(n-1)$</span><span>pairs $=n+1$</span>",
+      domino: "<span>base</span><span>$n \\to n+1$</span><span>all $n$</span>",
+      inequality: "<span>$(a-b)^2\\ge0$</span><span>$a^2+b^2\\ge2ab$</span>",
+      arrow: "<span>$x>2$</span><span>$y>3$</span><span>$2x+5y>19$</span>",
+      contradiction: "<span>assume not</span><span>derive impossible</span>",
+      mod: "<span>$3k$</span><span>$3k+1$</span><span>$3k+2$</span>",
+      "mod-grid": "<span>$\\bmod\\ 3$</span><span>$\\bmod\\ 4$</span><span>$\\bmod\\ 12$</span>",
+      "mod-cases": "<span>$\\bmod\\ 2$</span><span>$\\bmod\\ 3$</span><span>$\\bmod\\ 6$</span>",
+      consecutive: "<span>$n-1$</span><span>$n$</span><span>$n+1$</span>",
+      "factor-tree": "<span>$30$</span><span>$2\\cdot3\\cdot5$</span>",
+      cycle: "<span>$2\\equiv-1$</span><span>powers alternate</span>",
+      "last-digit": "<span>$11^{10}-1$</span><span>$10\\cdot(\\cdots)$</span><span>$100\\mid N$</span>",
+      "truth-chart": "<span>ranges</span><span>true count</span><span>exactly one</span>",
+      "decision-tree": "<span>left heavy</span><span>balance</span><span>right heavy</span>",
+      ternary: "<span>3 groups</span><span>3 outcomes</span><span>3 weighings</span>",
+      board: "<span>local zero rectangles</span><span>cancel board</span>",
+      triangle: "<span>4 small triangles</span><span>5 points</span>",
+      "pigeon-mod": "<span>3 numbers</span><span>2 square remainders</span>",
+      "power-boxes": "<span>objects</span><span>power remainders</span><span>boxes</span>",
+      range: "<span>14 sums</span><span>13 values</span><span>repeat</span>",
+      hexagon: "<span>6 vertices</span><span>2 colors</span><span>one triangle</span>",
+      paths: "<span>R R ...</span><span>U U ...</span><span>arrange moves</span>",
+      derangement: "<span>wrong labels</span><span>no fixed points</span>"
+    }[type] || "<span>model</span><span>reason</span><span>conclude</span>";
+
+    return `<div class="soft-problem-visual" aria-hidden="true">${visual}</div>`;
+  }
+
+  function levelBadgeClass(level) {
+    const l = (level || "").toLowerCase();
+    if (l === "easy") return "badge-easy";
+    if (l === "exam") return "badge-exam";
+    return "badge-medium";
+  }
+
+  function renderExamples(examples) {
+    if (!examples.length) return "";
+    return `
+      <section class="panel">
+        <h2>Worked examples</h2>
+        <p class="lead">Study these in order. They move from basic recognition to exam-level method. Each example shows the exact thinking process you need in the exam.</p>
+        <div class="example-stack">
+          ${examples.map((example) => `
+            <article class="example-card">
+              <div class="badge ${levelBadgeClass(example.level)}">${example.level}</div>
+              <h3>${example.title}</h3>
+              <p><strong>Question:</strong> <span class="formula">${example.question}</span></p>
+              <ol class="solution-list">
+                ${example.solution.map((step) => `<li>${step}</li>`).join("")}
+              </ol>
+              <div class="exam-answer"><strong>Key takeaway:</strong> ${example.takeaway}</div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderBeginnerGuide(topic) {
+    if (!topic.beginnerGuide?.length) return "";
+
+    return `
+      <section class="panel beginner-guide-panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-forest">Beginner guide</div>
+            <h2>Understand the topic before solving</h2>
+            <p class="lead">
+              These cards explain the exam moves slowly: what the symbols mean, what to do first,
+              and which mistake to avoid.
+            </p>
+          </div>
+          <div class="module-count-card">
+            <strong>${topic.beginnerGuide.length}</strong>
+            <span>guided concept cards</span>
+          </div>
+        </div>
+        <div class="beginner-guide-grid">
+          ${topic.beginnerGuide.map((card, index) => `
+            <article class="beginner-guide-card">
+              <div class="soft-module-top">
+                <span class="problem-number">${index + 1}</span>
+                <div>
+                  <h3>${card.title}</h3>
+                  <p>${card.problem}</p>
+                </div>
+              </div>
+              <div class="module-learn">
+                <strong>What it means</strong>
+                <p>${card.meaning}</p>
+              </div>
+              <div class="module-example">
+                <strong>How to start</strong>
+                <p>${card.method}</p>
+              </div>
+              <ol class="solution-list compact-steps">
+                ${card.steps.map((step) => `<li>${step}</li>`).join("")}
+              </ol>
+              <div class="exam-answer"><strong>Remember:</strong> ${card.tip}</div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderFormulaBank(topic) {
+    if (!topic.formulaBank?.length) return "";
+
+    return `
+      <section class="panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-navy">Rules and formulas</div>
+            <h2>What you must know for this topic</h2>
+            <p class="lead">These are the laws, definitions, and formulas that old-exam solutions reuse.</p>
+          </div>
+          <div class="module-count-card">
+            <strong>${topic.formulaBank.length}</strong>
+            <span>core rules</span>
+          </div>
+        </div>
+        <div class="law-group-grid">
+          ${topic.formulaBank.map((item) => `
+            <article class="study-card">
+              <div class="badge ${item.accent || "accent-copper"}">${item.tag || "Rule"}</div>
+              <h3>${item.name}</h3>
+              <p class="formula">${item.formula}</p>
+              <p>${item.why}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderProblemSolving(topic) {
+    if (!topic.problemSolving?.length) return "";
+
+    return `
+      <section class="panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-forest">Problem solving</div>
+            <h2>How exam questions are solved</h2>
+            <p class="lead">Use these as templates. Read the question, choose the method, then follow the steps.</p>
+          </div>
+          <div class="module-count-card">
+            <strong>${topic.problemSolving.length}</strong>
+            <span>solution templates</span>
+          </div>
+        </div>
+        <div class="example-stack">
+          ${topic.problemSolving.map((problem) => `
+            <article class="example-card">
+              <div class="badge ${problem.accent || "accent-copper"}">${problem.type || "Template"}</div>
+              <h3>${problem.title}</h3>
+              <p><strong>Question:</strong> <span class="formula">${problem.question}</span></p>
+              <p><strong>Method:</strong> ${problem.method}</p>
+              <ol class="solution-list">
+                ${problem.steps.map((step) => `<li>${step}</li>`).join("")}
+              </ol>
+              <div class="exam-answer"><strong>Remember:</strong> ${problem.remember}</div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderMemoryQuiz(topic) {
+    if (!topic.memoryQuiz.length) return "";
+    return `
+      <section class="panel">
+        <h2>Memory quiz</h2>
+        <p class="lead">Click any card to flip it and reveal the answer. These facts should become automatic before exam practice.</p>
+        <div class="memory-grid">
+          ${topic.memoryQuiz.map(([q, a], index) => `
+            <div class="flip-card" data-flip-card="${topic.id}-${index}" role="button" tabindex="0" aria-label="Memory card: ${q}">
+              <div class="flip-card-inner">
+                <div class="flip-card-front">
+                  <span class="flip-q">${index + 1}. ${q}</span>
+                  <span class="flip-hint">Click to reveal answer</span>
+                </div>
+                <div class="flip-card-back">
+                  <span class="flip-a">${a}</span>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderLawMemoryAndLibrary(topic) {
+    if (topic.id !== "logic-proofs" || !legacy.lawGroups?.length) return "";
+    const activeDeck = lawCategoryCards(lawTrainerState.category);
+    const activeCard = activeDeck[lawTrainerState.index] || activeDeck[0];
+    const progress = activeDeck.length ? Math.round(((lawTrainerState.index + 1) / activeDeck.length) * 100) : 0;
+
+    return `
+      <section class="panel law-studio">
+        <div class="law-studio-header">
+          <div>
+            <div class="badge accent-forest">Law trainer</div>
+            <h2>Study one law at a time</h2>
+            <p class="lead">
+              The old version showed too much at once. This mode works like a teacher at the board:
+              choose a category, recognize the shape, predict the rewrite or rule, then reveal why it matters.
+            </p>
+          </div>
+          <div class="law-method-card">
+            <strong>Method</strong>
+            <span>1. Identify the main connective or rule shape.</span>
+            <span>2. Say the rewrite/inference before revealing.</span>
+            <span>3. Explain when the exam would use it.</span>
+          </div>
+        </div>
+
+        <div class="law-category-tabs" role="tablist" aria-label="Law categories">
+          ${lawCategories().map(([id, label]) => `
+            <button class="filter-btn ${lawTrainerState.category === id ? "is-active" : ""}" data-law-category="${id}">${label}</button>
+          `).join("")}
+        </div>
+
+        <div class="law-trainer-layout">
+          ${renderTruthReferenceCompact()}
+          ${activeCard ? renderFocusedLawCard(activeCard, activeDeck.length, progress) : "<div class='empty-state'>No laws found for this category.</div>"}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Full law reference library</h2>
+        <p class="lead">Collapsed by default so it stays useful without overwhelming the study flow.</p>
+        <div class="law-group-grid">
+          ${legacy.lawGroups.map((group) => `
+            <details class="deck">
+              <summary>
+                <div class="summary-left">
+                  <span class="summary-title">${group.title}</span>
+                  <span class="pill">${group.source}</span>
+                </div>
+                <span class="pill">${group.rows.length} lines</span>
+              </summary>
+              <p class="summary-copy">${group.blurb}</p>
+              <div class="table-wrap">
+                <table class="study-table">
+                  <thead><tr>${group.columns.map((column) => `<th>${column}</th>`).join("")}</tr></thead>
+                  <tbody>
+                    ${group.rows.map((row) => `
+                      <tr>
+                        <td>${row[0]}</td>
+                        <td class="formula">${row[1]}</td>
+                        <td class="formula">${row[2]}</td>
+                        <td>${row[3]}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTruthReferenceCompact() {
+    return `
+      <aside class="truth-reference-card">
+        <h3>Truth table anchor</h3>
+        <p>The law deck is easier if these columns are automatic.</p>
+        <div class="table-wrap">
+          <table class="truth-table compact-truth-table">
+            <tr><th>$p$</th><th>$q$</th><th>$p\\to q$</th><th>$p\\leftrightarrow q$</th></tr>
+            <tr><td>F</td><td>F</td><td class="truth-true">T</td><td class="truth-true">T</td></tr>
+            <tr><td>F</td><td>T</td><td class="truth-true">T</td><td class="truth-false">F</td></tr>
+            <tr><td>T</td><td>F</td><td class="truth-false danger-cell">F</td><td class="truth-false">F</td></tr>
+            <tr><td>T</td><td>T</td><td class="truth-true">T</td><td class="truth-true">T</td></tr>
+          </table>
+        </div>
+        <div class="truth-callout">Only $T \\to F$ makes implication false.</div>
+      </aside>
+    `;
+  }
+
+  function truthClass(value) {
+    return value === "T" ? "truth-true" : "truth-false";
+  }
+
+  function renderLogicTruthTables(topic) {
+    if (topic.id !== "logic-proofs") return "";
+
+    const rows = [
+      { p: "F", q: "F" },
+      { p: "F", q: "T" },
+      { p: "T", q: "F" },
+      { p: "T", q: "T" }
+    ].map(({ p, q }) => {
+      const P = p === "T";
+      const Q = q === "T";
+      const tf = (value) => (value ? "T" : "F");
+      return {
+        p,
+        q,
+        notP: tf(!P),
+        notQ: tf(!Q),
+        and: tf(P && Q),
+        or: tf(P || Q),
+        xor: tf(P !== Q),
+        implies: tf(!P || Q),
+        reverseImplies: tf(!Q || P),
+        biconditional: tf(P === Q),
+        nand: tf(!(P && Q)),
+        nor: tf(!(P || Q)),
+        negAnd: tf(!(P && Q)),
+        deMorganAnd: tf(!P || !Q),
+        negOr: tf(!(P || Q)),
+        deMorganOr: tf(!P && !Q),
+        negImplies: tf(P && !Q),
+        conditionalRewrite: tf(!P || Q),
+        contrapositive: tf(!Q || !P)
+      };
+    });
+
+    const coreHeaders = [
+      ["p", "$p$"],
+      ["q", "$q$"],
+      ["notP", "$\\neg p$"],
+      ["notQ", "$\\neg q$"],
+      ["and", "$p\\land q$"],
+      ["or", "$p\\lor q$"],
+      ["xor", "$p\\oplus q$"],
+      ["implies", "$p\\to q$"],
+      ["reverseImplies", "$q\\to p$"],
+      ["biconditional", "$p\\leftrightarrow q$"],
+      ["nand", "$\\neg(p\\land q)$"],
+      ["nor", "$\\neg(p\\lor q)$"]
+    ];
+
+    const lawHeaders = [
+      ["p", "$p$"],
+      ["q", "$q$"],
+      ["negAnd", "$\\neg(p\\land q)$"],
+      ["deMorganAnd", "$\\neg p\\lor\\neg q$"],
+      ["negOr", "$\\neg(p\\lor q)$"],
+      ["deMorganOr", "$\\neg p\\land\\neg q$"],
+      ["negImplies", "$\\neg(p\\to q)$"],
+      ["conditionalRewrite", "$\\neg p\\lor q$"],
+      ["contrapositive", "$\\neg q\\to\\neg p$"]
+    ];
+
+    const renderTable = (headers, dangerKey) => `
+      <div class="table-wrap full-truth-wrap">
+        <table class="truth-table full-truth-table">
+          <thead>
+            <tr>${headers.map(([, label]) => `<th>${label}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                ${headers.map(([key]) => `
+                  <td class="${truthClass(row[key])} ${key === dangerKey && row[key] === "F" ? "danger-cell" : ""}">${row[key]}</td>
+                `).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    return `
+      <section class="panel truth-master-panel">
+        <div class="truth-master-header">
+          <div>
+            <div class="badge accent-navy">Truth tables</div>
+            <h2>Complete truth-table reference</h2>
+            <p class="lead">
+              Use this as the anchor for tautology, contradiction, equivalence, implication,
+              biconditional, De Morgan, negated conditional, and proof-law questions.
+            </p>
+          </div>
+          <div class="truth-method-card">
+            <strong>Exam method</strong>
+            <span>1. Make columns for subformulas first.</span>
+            <span>2. Evaluate the main connective last.</span>
+            <span>3. Classify by the final column.</span>
+          </div>
+        </div>
+
+        <div class="truth-reference-grid">
+          <article class="truth-reference-block">
+            <h3>Core connectives</h3>
+            <p>These columns cover the basic operators that appear in almost every logic question.</p>
+            ${renderTable(coreHeaders, "implies")}
+          </article>
+
+          <article class="truth-reference-block">
+            <h3>Exam rewrites and negations</h3>
+            <p>Use these to check laws, simplify formulas, and build proof sequences.</p>
+            ${renderTable(lawHeaders, "negImplies")}
+          </article>
+        </div>
+
+        <div class="truth-rule-grid">
+          <div><strong>Tautology</strong><span>Final column is all T.</span></div>
+          <div><strong>Contradiction</strong><span>Final column is all F.</span></div>
+          <div><strong>Contingency</strong><span>Final column has both T and F.</span></div>
+          <div><strong>Implication danger row</strong><span>$p\\to q$ is false only when $p=T$ and $q=F$.</span></div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderFocusedLawCard(card, deckLength, progress) {
+    const total = lawTrainerState.known + lawTrainerState.learning;
+    return `
+      <article class="focused-law-card">
+        <div class="focused-law-top">
+          <div>
+            <div class="badge accent-copper">${card.family}</div>
+            <h3>${card.name}</h3>
+            <p>${card.title}</p>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.3rem;">
+            <span class="quiz-chip"><strong>${lawTrainerState.index + 1}</strong> / ${deckLength}</span>
+            ${total > 0 ? `<span class="quiz-chip" style="font-size:0.78rem;">Know <strong>${lawTrainerState.known}</strong> · Still learning <strong>${lawTrainerState.learning}</strong></span>` : ""}
+          </div>
+        </div>
+
+        <div class="progress">
+          <div class="progress-fill" style="width: ${progress}%;"></div>
+        </div>
+
+        <div class="law-board">
+          <span>Recognize this shape</span>
+          <strong class="formula">${card.prompt}</strong>
+        </div>
+
+        ${lawTrainerState.revealed ? `
+          <div class="law-board answer-board">
+            <span>Correct move</span>
+            <strong class="formula">${card.answer}</strong>
+          </div>
+          <div class="law-explainer">
+            <strong>Why this matters</strong>
+            <p>${card.cue}</p>
+            <p>${lawUseNote(card)}</p>
+          </div>
+          <div class="law-grade-row">
+            <button class="law-grade-btn know" data-law-grade="know">I know this ✓</button>
+            <button class="law-grade-btn learning" data-law-grade="learning">Still learning…</button>
+          </div>
+        ` : `
+          <div class="law-hidden-answer">
+            Predict the rewrite or inference rule before revealing the answer.
+            <br><small style="color:var(--muted);font-size:0.8rem;margin-top:0.4rem;display:block;">Tip: press Space or Enter to reveal · Arrow keys to navigate</small>
+          </div>
+        `}
+
+        <div class="quiz-actions law-actions">
+          <button class="btn" data-law-prev>← Previous</button>
+          <button class="btn primary" data-law-reveal>${lawTrainerState.revealed ? "Hide answer" : "Reveal answer"}</button>
+          <button class="btn secondary" data-law-next>Next →</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function lawUseNote(card) {
+    const name = card.name.toLowerCase();
+    if (name.includes("conditional")) return "Use this when the exam asks for a truth table, tautology check, or negation involving an arrow.";
+    if (name.includes("de morgan")) return "Use this when a negation sits outside AND/OR brackets.";
+    if (name.includes("modus")) return "Use this in proof sequences when a conditional and one matching line are available.";
+    if (name.includes("biconditional")) return "Use this when the exam asks what iff means or asks you to build a biconditional truth table.";
+    if (name.includes("quantifier") || name.includes("nested")) return "Use this in predicate translation and negation questions.";
+    if (name.includes("tautology") || name.includes("contradiction")) return "Use this when classifying a formula from the final truth-table column.";
+    return "Use this as a rewrite or proof move when the formula has the same shape as the prompt.";
+  }
+
+  function renderTranslationLibrary(topic) {
+    if (topic.id !== "predicate-quantifiers" || !legacy.translationGroups?.length) return "";
+
+    return `
+      <section class="panel">
+        <h2>Full translation library</h2>
+        <p class="lead">
+          The detailed translation guide is restored here: quantifier choice, nested quantifiers,
+          only/no/exactly-one patterns, old-exam translations, and negation recipes.
+        </p>
+        <div id="translation-library-restored">
+          ${legacy.translationGroups.map((group) => `
+            <div class="panel nested-panel">
+              <h3>${group.title}</h3>
+              <p class="lead">${group.blurb}</p>
+              <div class="pill-row">
+                <span class="pill">${group.source}</span>
+                <span class="pill">${group.cards.length} cards</span>
+              </div>
+              <div class="card-grid">
+                ${group.cards.map((card) => `
+                  <article class="study-card">
+                    <div class="badge ${card.accent}">${card.tag}</div>
+                    <h3>${card.title}</h3>
+                    <span class="formula">${card.formula}</span>
+                    <p>${card.note}</p>
+                  </article>
+                `).join("")}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function getPracticeState(topic) {
+    if (!quizState.has(topic.id)) {
+      quizState.set(topic.id, { answered: new Map(), score: 0 });
+    }
+    return quizState.get(topic.id);
+  }
+
+  function renderPracticeQuiz(topic) {
+    const practiceItems = practiceItemsForTopic(topic);
+    if (!practiceItems.length) return "";
+    const state = getPracticeState(topic);
+    const answeredCount = state.answered.size;
+    const topicHints = hintState.get(topic.id) || new Map();
+
+    return `
+      <section class="panel">
+        <div class="quiz-toolbar">
+          <div>
+            <h2>Practice quiz</h2>
+            <p class="lead">Covers the main question types for this topic. Use the hint button if you are stuck.</p>
+          </div>
+          <span class="quiz-chip">Score <strong>${state.score} / ${answeredCount || 0}</strong></span>
+        </div>
+        <div class="quiz-list">
+          ${practiceItems.map((item, qIndex) => {
+            const answered = state.answered.get(qIndex);
+            const hintShown = topicHints.get(qIndex);
+            const diffClass = item.difficulty === "easy" ? "badge-easy" : item.difficulty === "exam" ? "badge-exam" : "badge-medium";
+            return `
+              <article class="quiz-card compact-quiz">
+                <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">
+                  ${item.legacy ? `<div class="badge accent-navy">Drill bank</div>` : ""}
+                  ${item.difficulty ? `<div class="badge ${diffClass}">${item.difficulty}</div>` : ""}
+                </div>
+                <h3>${qIndex + 1}. ${item.q}</h3>
+                ${!answered && item.hint ? `
+                  ${hintShown
+                    ? `<div class="hint-box">Hint: ${item.hint}</div>`
+                    : `<button class="hint-btn" data-hint="${qIndex}" data-topic-hint="${topic.id}">Show hint</button>`
+                  }
+                ` : ""}
+                <div class="options">
+                  ${item.options.map((option, optionIndex) => {
+                    const className = answered
+                      ? optionIndex === item.answer
+                        ? "option show-correct"
+                        : optionIndex === answered.choice
+                          ? "option wrong"
+                          : "option"
+                      : "option";
+                    return `<button class="${className}" data-practice="${qIndex}" data-choice="${optionIndex}" ${answered ? "disabled" : ""}>${option}</button>`;
+                  }).join("")}
+                </div>
+                ${answered ? `<div class="feedback ${answered.correct ? "correct" : "wrong"}">${answered.correct ? "<strong>Correct.</strong>" : "<strong>Not quite.</strong>"} ${item.why}</div>` : ""}
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderReadiness(topic) {
+    return `
+      <section class="panel">
+        <h2>Exam readiness checklist</h2>
+        <ul class="checklist">
+          ${topic.readiness.map((item) => `<li><span class="checklist-text">${item}</span></li>`).join("")}
+        </ul>
+      </section>
+    `;
+  }
+
+  function renderSoftStartModules(topic) {
+    if (topic.id !== "math-fundamentals" || !data.softStartModules?.length) {
+      return "";
+    }
+
+    return `
+      <section class="panel">
+        <div class="module-path-header">
+          <div>
+            <div class="badge accent-navy">Foundation path</div>
+            <h2>Build the foundations step by step</h2>
+            <p class="lead">
+              Study these cards in order if you want the softest possible start before old-exam
+              practice. Each card introduces one idea, one example, and one quick check.
+            </p>
+          </div>
+          <div class="module-count-card">
+            <strong>${data.softStartModules.length}</strong>
+            <span>foundation cards</span>
+          </div>
+        </div>
+        <div class="soft-module-grid">
+          ${data.softStartModules.map((module) => `
+            <article class="soft-module-card">
+              <div class="soft-module-top">
+                <div>
+                  <h3>${module.title}</h3>
+                </div>
+              </div>
+              <div class="concept-row">
+                ${module.concepts.map((concept) => `<span>${concept}</span>`).join("")}
+              </div>
+              ${renderSoftModuleVisual(module)}
+              <div class="module-learn">
+                <strong>Learn</strong>
+                <p>${module.learn}</p>
+              </div>
+              <div class="module-example">
+                <strong>Example</strong>
+                <p>${module.example}</p>
+              </div>
+              <div class="module-quiz">
+                <strong>Quick check</strong>
+                <p>${module.quiz}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSoftModuleVisual(module) {
+    const key = module.module.replace(" duplicate", "").replace(" slides", "").replace(" notes", "");
+    const visuals = {
+      "004": `
+        <div class="module-visual symbol-visual">
+          <span>∈</span><span>∀</span><span>∑</span><span>→</span>
+          <small>symbols become sentences</small>
+        </div>
+      `,
+      "005": `
+        <div class="module-visual venn-visual">
+          <span class="venn a">$A$</span><span class="venn b">$B$</span><strong>$A\\cap B$</strong>
+        </div>
+      `,
+      "006": `
+        <div class="module-visual abstraction-visual">
+          <span>concrete</span><i></i><span>abstract rule</span><i></i><span>new examples</span>
+        </div>
+      `,
+      "007": `
+        <div class="module-visual grid-visual">
+          <span></span><span></span><span></span><span></span>
+          <b>$(1,x)$</b><b>$(1,y)$</b><b>$(2,x)$</b><b>$(2,y)$</b>
+        </div>
+      `,
+      "008": `
+        <div class="module-visual numberline-visual">
+          <span>-2</span><span>-1</span><span>0</span><span>1</span><span>2</span>
+        </div>
+      `,
+      "009": `
+        <div class="module-visual metric-visual">
+          <span>$x$</span><strong>$d=0$</strong><span>$x$</span>
+          <span>$x$</span><strong>$d=1$</strong><span>$y$</span>
+        </div>
+      `,
+      "010": `
+        <div class="module-visual closure-visual">
+          <span>$\\mathbb N$</span><strong>$+$</strong><span>$\\mathbb N$</span><strong>$=$</strong><span>$\\mathbb N$</span>
+        </div>
+      `,
+      "011": `
+        <div class="module-visual rules-visual">
+          <span>$a+b=b+a$</span><span>$a(b+c)=ab+ac$</span><span>$ab=0\\Rightarrow a=0\\lor b=0$</span>
+        </div>
+      `,
+      "012": `
+        <div class="module-visual commute-visual">
+          <span>$4\\times6$</span><strong>$=$</strong><span>$6\\times4$</span>
+        </div>
+      `,
+      "013": `
+        <div class="module-visual associate-visual">
+          <span>$(a+b)+c$</span><strong>$=$</strong><span>$a+(b+c)$</span>
+        </div>
+      `,
+      "014": `
+        <div class="module-visual distribute-visual">
+          <span class="wide">b+c</span><strong>a</strong><em>ab</em><em>ac</em>
+        </div>
+      `,
+      "015": `
+        <div class="module-visual theory-visual">
+          <span>axioms</span><span>definitions</span><span>theorems</span><span>proofs</span>
+        </div>
+      `,
+      "016": `
+        <div class="module-visual integer-visual">
+          <span>+ debt</span><strong>$-(-60)=+60$</strong><span>temperature</span>
+        </div>
+      `,
+      "017": `
+        <div class="module-visual factor-visual">
+          <span>$120$</span><i></i><span>$2^3\\cdot3\\cdot5$</span>
+        </div>
+      `,
+      "018": `
+        <div class="module-visual fraction-visual">
+          <span>$p$</span><hr><span>$q\\ne0$</span>
+        </div>
+      `,
+      "019": `
+        <div class="module-visual expression-visual">
+          <span class="coef">$5$</span><span class="var">$x$</span><sup>$2$</sup><strong>$+6$</strong>
+        </div>
+      `,
+      "020": `
+        <div class="module-visual precedence-visual">
+          <span>()</span><span>powers</span><span>× ÷</span><span>+ -</span>
+        </div>
+      `,
+      "021": `
+        <div class="module-visual substitute-visual">
+          <span>$E(x,y)$</span><i></i><span>$E(-1,2)$</span><i></i><strong>value</strong>
+        </div>
+      `,
+      "022": `
+        <div class="module-visual simplify-visual">
+          <span>expand</span><i></i><span>combine</span><i></i><span>cancel</span>
+        </div>
+      `,
+      "023": `
+        <div class="module-visual sigma-visual">
+          <strong>∑</strong><span>add</span><strong>∏</strong><span>multiply</span>
+        </div>
+      `,
+      "024": `
+        <div class="module-visual function-visual">
+          <span>$x$</span><i>$f$</i><span>$f(x)$</span>
+          <span>input</span><i></i><span>output</span>
+        </div>
+      `,
+      "025": `
+        <div class="module-visual sequence-visual">
+          <span>$a_1$</span><span>$a_2$</span><span>$a_3$</span><span>$a_4$</span><span>$\\cdots$</span>
+        </div>
+      `,
+      "026": `
+        <div class="module-visual relation-visual">
+          <span>A</span><strong>R</strong><span>B</span>
+          <small>objects connected by a relation</small>
+        </div>
+      `,
+      "027": `
+        <div class="module-visual mini-graph-visual">
+          <b>A</b><b>B</b><b>C</b><i class="ab"></i><i class="bc"></i>
+        </div>
+      `,
+      "028": `
+        <div class="module-visual structure-visual">
+          <span>set</span><strong>+</strong><span>operation</span><strong>+</strong><span>laws</span>
+        </div>
+      `,
+      "029": `
+        <div class="module-visual floor-visual">
+          <span>$3.7$</span><i></i><b>$\\lfloor3.7\\rfloor=3$</b>
+          <span>$3.7$</span><i></i><b>$\\lceil3.7\\rceil=4$</b>
+        </div>
+      `,
+      "030": `
+        <div class="module-visual factorial-visual">
+          <span>$4!$</span><strong>$=$</strong><span>$4\\cdot3\\cdot2\\cdot1$</span><strong>$=$</strong><span>$24$</span>
+        </div>
+      `,
+      "031": `
+        <div class="module-visual log-visual">
+          <span>$2^?=8$</span><i></i><b>$\\log_2(8)=3$</b>
+        </div>
+      `,
+      "032": `
+        <div class="module-visual counter-visual">
+          <span>Rule: $\\forall x\\,P(x)$</span>
+          <span class="fail">Found $a=2$ where $\\neg P(a)$</span>
+          <strong>Claim Dead</strong>
+        </div>
+      `,
+      "033": `
+        <div class="module-visual ifthen-visual">
+          <span>$p\\to q$</span>
+          <small>Only false if $T\\to F$</small>
+        </div>
+      `,
+      "034": `
+        <div class="module-visual systems-visual">
+          <span>$\\mathbb N\\subset\\mathbb Z\\subset\\mathbb Q\\subset\\mathbb R$</span>
+        </div>
+      `,
+      "035": `
+        <div class="module-visual modulo-visual">
+          <div class="clock">$13\\bmod5=3$</div>
+        </div>
+      `
+    };
+
+    return visuals[key] || `<div class="module-visual symbol-visual"><span>∈</span><span>∑</span><span>f</span><span>R</span></div>`;
+  }
+
+  function renderExamRefs(topic) {
+    const refs = data.examMap.filter((entry) => entry[3] === topic.id);
+    if (!refs.length || topic.id === "exam-map") return "";
+    return `
+      <section class="panel">
+        <h2>Old exam parts covered here</h2>
+        <p class="lead">These are the exact exam questions that this topic prepares you for.</p>
+        <div class="exam-ref-grid">
+          ${refs.map(([date, part, task]) => `
+            <article class="exam-ref">
+              <strong>${date} — ${part}</strong>
+              <span>${task}</span>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderExamMap() {
+    const topics = new Map(data.topics.map((topic) => [topic.id, topic.short]));
+    return `
+      <section class="panel">
+        <h2>Every old exam part mapped</h2>
+        <p class="lead">Use this as a coverage checklist. Each row points to the topic that teaches the method.</p>
+        <div class="table-wrap">
+          <table class="study-table">
+            <thead><tr><th>Exam</th><th>Part</th><th>What it tests</th><th>Study page</th></tr></thead>
+            <tbody>
+              ${data.examMap.map(([date, part, task, topicId]) => `
+                <tr>
+                  <td>${date}</td>
+                  <td>${part}</td>
+                  <td>${task}</td>
+                  <td><button class="link-btn" data-topic-link="${topicId}">${topics.get(topicId) || topicId}</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTopic(topic) {
+    const lessons = topic.lesson.map((paragraph) => `<p>${paragraph}</p>`).join("");
+    const methods = topic.methods.map((method) => `<li><span class="checklist-text">${method}</span></li>`).join("");
+
+    root.innerHTML = `
+      <section class="topic-hero panel">
+        <div>
+          <div class="badge accent-forest">${topic.examWeight}</div>
+          <h2>${topic.title}</h2>
+          <p class="lead">${topic.goal}</p>
+        </div>
+      </section>
+
+      <section class="lesson-grid">
+        <article class="panel">
+          <h2>Learn</h2>
+          <div class="lesson-copy">${lessons}</div>
+        </article>
+        <article class="panel">
+          <h2>Exam method</h2>
+          <ul class="checklist">${methods}</ul>
+        </article>
+      </section>
+
+      ${renderVisual(topic.visual)}
+      ${renderVerySoftStartPath(topic)}
+      ${topic.id === "exam-map" ? renderExamMap() : ""}
+      ${renderBeginnerGuide(topic)}
+      ${renderFormulaBank(topic)}
+      ${renderProblemSolving(topic)}
+      ${renderExamples(topic.examples)}
+      ${renderMemoryQuiz(topic)}
+      ${renderLogicTruthTables(topic)}
+      ${renderLawMemoryAndLibrary(topic)}
+      ${renderTranslationLibrary(topic)}
+      ${renderPracticeQuiz(topic)}
+      ${renderSoftStartModules(topic)}
+      ${renderReadiness(topic)}
+      ${renderExamRefs(topic)}
+    `;
+
+    /* ── Flip memory cards ──────────────────────────────── */
+    root.querySelectorAll("[data-flip-card]").forEach((card) => {
+      const activate = () => {
+        card.classList.toggle("flipped");
+        if (window.refreshMath) window.refreshMath();
+      };
+      card.addEventListener("click", activate);
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+      });
+    });
+
+    /* ── Hint buttons ───────────────────────────────────── */
+    root.querySelectorAll("[data-hint]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const qIndex = Number(btn.dataset.hint);
+        const topicId = btn.dataset.topicHint;
+        if (!hintState.has(topicId)) hintState.set(topicId, new Map());
+        hintState.get(topicId).set(qIndex, true);
+        renderTopic(topic);
+        if (window.refreshMath) window.refreshMath();
+      });
+    });
+
+    /* ── Practice quiz answers ──────────────────────────── */
+    root.querySelectorAll("[data-practice]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const qIndex = Number(button.dataset.practice);
+        const choice = Number(button.dataset.choice);
+        const current = practiceItemsForTopic(topic)[qIndex];
+        const state = getPracticeState(topic);
+        const correct = choice === current.answer;
+        if (!state.answered.has(qIndex)) {
+          state.answered.set(qIndex, { choice, correct });
+          if (correct) state.score += 1;
+        }
+        renderTopic(topic);
+        if (window.refreshMath) window.refreshMath();
+      });
+    });
+
+    root.querySelectorAll("[data-topic-link]").forEach((button) => {
+      button.addEventListener("click", () => {
+        activeTopicId = button.dataset.topicLink;
+        render();
+      });
+    });
+
+    root.querySelectorAll("[data-law-category]").forEach((button) => {
+      button.addEventListener("click", () => {
+        lawTrainerState.category = button.dataset.lawCategory;
+        lawTrainerState.index = 0;
+        lawTrainerState.revealed = false;
+        lawTrainerState.known = 0;
+        lawTrainerState.learning = 0;
+        renderTopic(topic);
+      });
+    });
+
+    root.querySelector("[data-law-prev]")?.addEventListener("click", () => {
+      const deck = lawCategoryCards(lawTrainerState.category);
+      lawTrainerState.index = deck.length
+        ? (lawTrainerState.index - 1 + deck.length) % deck.length
+        : 0;
+      lawTrainerState.revealed = false;
+      renderTopic(topic);
+    });
+
+    root.querySelector("[data-law-next]")?.addEventListener("click", () => {
+      const deck = lawCategoryCards(lawTrainerState.category);
+      lawTrainerState.index = deck.length
+        ? (lawTrainerState.index + 1) % deck.length
+        : 0;
+      lawTrainerState.revealed = false;
+      renderTopic(topic);
+    });
+
+    root.querySelector("[data-law-reveal]")?.addEventListener("click", () => {
+      lawTrainerState.revealed = !lawTrainerState.revealed;
+      renderTopic(topic);
+    });
+
+    /* ── Law self-grade buttons ─────────────────────────── */
+    root.querySelectorAll("[data-law-grade]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.lawGrade === "know") {
+          lawTrainerState.known += 1;
+        } else {
+          lawTrainerState.learning += 1;
+        }
+        const deck = lawCategoryCards(lawTrainerState.category);
+        lawTrainerState.index = deck.length
+          ? (lawTrainerState.index + 1) % deck.length
+          : 0;
+        lawTrainerState.revealed = false;
+        renderTopic(topic);
+      });
+    });
+
+    if (window.refreshMath) window.refreshMath();
+  }
+
+  function render() {
+    visitedTopics.add(activeTopicId);
+    renderNav();
+    renderTopic(topicById(activeTopicId));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  renderHero();
+  render();
+
+  // Re-run MathJax whenever a soft-start details card is opened
+  document.addEventListener("toggle", (e) => {
+    if (e.target.classList.contains("soft-problem-card") && e.target.open) {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([e.target]).catch(() => {});
+      }
+    }
+  }, true);
+})();

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discrete Math Exam Studio</title>
+
+  <!-- Google Fonts: Inter (body) + Lora (headings) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="./logic_exam_prep.css" />
+
+  <style>
+    /* Override font families to use Google Fonts */
+    body {
+      font-family: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+    }
+    h1, h2, h3,
+    .hero-side h2,
+    .panel h2, .panel h3,
+    .study-card h3, .quiz-card h3,
+    .path-step h3, .flow-card h3,
+    .worked-example h3,
+    .example-card h3, .compact-quiz h3,
+    .soft-phase h3, .soft-module-card h3,
+    .truth-reference-block h3, .focused-law-card h3,
+    .truth-reference-card h3,
+    .expl-section h4 {
+      font-family: "Lora", "Iowan Old Style", "Palatino Linotype", serif;
+    }
+  </style>
+
+  <script>
+    /* Apply saved theme before paint to avoid flash */
+    (function() {
+      const saved = localStorage.getItem('exam-studio-theme');
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        ignoreHtmlClass: 'tex2jax_ignore',
+        processHtmlClass: 'tex2jax_process'
+      }
+    };
+
+    window.refreshMath = function() {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise().catch((err) => console.error('MathJax error:', err));
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <div class="logic-app">
+    <div class="logic-shell">
+      <header class="hero">
+        <div class="eyebrow">GMI23G old-exam based learning system</div>
+        <div class="hero-grid">
+          <div>
+            <h1>Discrete Math Exam Studio</h1>
+            <p class="hero-copy">
+              A complete study site built from the old GMI23G exams. Each topic is taught like a
+              mini-course: learn the concept, see the visual, study worked examples, memorize key
+              facts, practice exam variants, and check readiness.
+            </p>
+            <div id="hero-stats" class="hero-stats"></div>
+          </div>
+          <aside class="hero-side">
+            <h2>Recommended route</h2>
+            <ol id="study-route"></ol>
+          </aside>
+        </div>
+      </header>
+
+      <nav id="topic-nav" class="nav-tabs" aria-label="Study topics"></nav>
+      <main id="app-root" aria-live="polite"></main>
+
+      <p class="footer-note">
+        Use your lecturer's notation if it differs. Some exams write negation as
+        <span class="formula">$A'$</span> instead of <span class="formula">$\neg A$</span>.
+      </p>
+    </div>
+  </div>
+
+  <!-- Dark mode toggle -->
+  <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark / light mode">
+    🌙
+  </button>
+
+  <!-- Back to top -->
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top" title="Back to top">
+    ↑
+  </button>
+
+  <script src="./logic_exam_prep.laws.js" defer></script>
+  <script src="./logic_exam_prep.translation.js" defer></script>
+  <script src="./logic_exam_prep.practice.js" defer></script>
+  <script src="./logic_exam_prep.topics.js" defer></script>
+  <script src="./logic_exam_prep.course_app.js" defer></script>
+
+  <script>
+    /* ── Dark mode toggle ─────────────────────────────────── */
+    const themeToggle = document.getElementById('theme-toggle');
+    function applyTheme(dark) {
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      themeToggle.textContent = dark ? '☀️' : '🌙';
+      localStorage.setItem('exam-studio-theme', dark ? 'dark' : 'light');
+    }
+    themeToggle.addEventListener('click', () => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      applyTheme(!isDark);
+    });
+    // Sync icon on load
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark');
+
+    /* ── Back to top ──────────────────────────────────────── */
+    const backToTop = document.getElementById('back-to-top');
+    window.addEventListener('scroll', () => {
+      backToTop.classList.toggle('visible', window.scrollY > 400);
+    }, { passive: true });
+    backToTop.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    /* ── Keyboard navigation for law trainer ──────────────── */
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        document.querySelector('[data-law-next]')?.click();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        document.querySelector('[data-law-prev]')?.click();
+      } else if (e.key === ' ' || e.key === 'Enter') {
+        const reveal = document.querySelector('[data-law-reveal]');
+        if (reveal && document.activeElement !== reveal) {
+          e.preventDefault();
+          reveal.click();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
