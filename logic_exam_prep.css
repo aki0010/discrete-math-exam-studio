@@ -2333,6 +2333,7 @@
     .learning-lab {
       display: grid;
       gap: 1rem;
+      min-width: 0;
     }
 
     .lab-grid,
@@ -2340,6 +2341,7 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
       gap: 0.9rem;
+      min-width: 0;
     }
 
     .lab-builder-grid {
@@ -2351,12 +2353,37 @@
       border: 1px solid var(--line);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.74);
+      min-width: 0;
     }
 
     .lab-card h3 {
       margin: 0.55rem 0;
       font-size: 1.05rem;
       line-height: 1.35;
+    }
+
+    .lab-card .options {
+      min-width: 0;
+    }
+
+    .lab-card .option {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .lab-option-text {
+      display: block;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .lab-option-text mjx-container {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 0.08rem;
     }
 
     .lab-prompt {

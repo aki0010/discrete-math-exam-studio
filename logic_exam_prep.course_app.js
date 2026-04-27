@@ -103,11 +103,11 @@
         {
           concept: "universal-implication",
           prompt: "All students who pass practiced old exams.",
-          ask: "Which formula has the right skeleton?",
+          ask: "Let $S(x)$ mean student, $P(x)$ mean passed, and $O(x)$ mean practiced old exams. Which formula has the right skeleton?",
           options: [
-            "$\\forall x((Student(x) \\land Passed(x)) \\to PracticedOldExams(x))$",
-            "$\\forall x(Student(x) \\land Passed(x) \\land PracticedOldExams(x))$",
-            "$\\exists x((Student(x) \\land Passed(x)) \\to PracticedOldExams(x))$"
+            "$\\forall x((S(x) \\land P(x)) \\to O(x))$",
+            "$\\forall x(S(x) \\land P(x) \\land O(x))$",
+            "$\\exists x((S(x) \\land P(x)) \\to O(x))$"
           ],
           answer: 0,
           why: "A universal restriction uses implication: if x is a passing student, then x practiced old exams.",
@@ -803,7 +803,7 @@
                             ? "option wrong"
                             : "option"
                         : "option";
-                      return `<button class="${className}" data-lab-builder="${slot.key}" data-lab-choice="${optionIndex}" ${answered ? "disabled" : ""}>${option}</button>`;
+                      return `<button class="${className}" data-lab-builder="${slot.key}" data-lab-choice="${optionIndex}" ${answered ? "disabled" : ""}><span class="lab-option-text">${option}</span></button>`;
                     }).join("")}
                   </div>
                   ${answered ? `
@@ -847,7 +847,7 @@
                           ? "option wrong"
                           : "option"
                       : "option";
-                    return `<button class="${className}" data-lab-item="${itemIndex}" data-lab-choice="${optionIndex}" ${answered !== undefined ? "disabled" : ""}>${option}</button>`;
+                    return `<button class="${className}" data-lab-item="${itemIndex}" data-lab-choice="${optionIndex}" ${answered !== undefined ? "disabled" : ""}><span class="lab-option-text">${option}</span></button>`;
                   }).join("")}
                 </div>
                 ${answered !== undefined ? `
