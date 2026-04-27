@@ -102,8 +102,8 @@
       items: [
         {
           concept: "universal-implication",
-          prompt: "All students who pass practiced old exams.",
-          ask: "Let $S(x)$ mean student, $P(x)$ mean passed, and $O(x)$ mean practiced old exams. Which formula has the right skeleton?",
+          prompt: "Every student who passed the exam practiced old exams.",
+          ask: "Let $S(x)$ mean student, $P(x)$ mean passed the exam, and $O(x)$ mean practiced old exams. Which formula has the right skeleton?",
           options: [
             "$\\forall x((S(x) \\land P(x)) \\to O(x))$",
             "$\\forall x(S(x) \\land P(x) \\land O(x))$",
@@ -1096,9 +1096,9 @@
                   <tbody>
                     ${group.rows.map((row) => `
                       <tr>
-                        <td>${row[0]}</td>
-                        <td class="formula">${row[1]}</td>
-                        <td class="formula">${row[2]}</td>
+                        <td class="math-table-cell">${row[0]}</td>
+                        <td class="math-table-cell">${row[1]}</td>
+                        <td class="math-table-cell">${row[2]}</td>
                         <td>${row[3]}</td>
                       </tr>
                     `).join("")}

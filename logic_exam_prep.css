@@ -1155,6 +1155,7 @@
       border-bottom: 1px solid var(--line);
       line-height: 1.55;
       overflow-wrap: anywhere;
+      min-width: 0;
     }
 
     .study-table th {
@@ -1181,10 +1182,32 @@
 
     #translation-library .formula {
       display: block;
+      max-width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
       padding: 0.2rem 0 0.35rem;
-      white-space: nowrap;
+      white-space: normal;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .math-table-cell {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .math-table-cell mjx-container,
+    .study-table td mjx-container,
+    .option mjx-container,
+    .exam-answer mjx-container,
+    .feedback mjx-container,
+    .solution-warning mjx-container,
+    .try-first mjx-container,
+    .similar-retry mjx-container {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 0.08rem;
       -webkit-overflow-scrolling: touch;
     }
 
@@ -3063,7 +3086,7 @@
       color: #f7fbff;
       font-size: clamp(1.05rem, 2.4vw, 1.45rem);
       overflow-x: auto;
-      white-space: nowrap;
+      white-space: normal;
       padding-bottom: 0.2rem;
     }
 
@@ -3152,7 +3175,7 @@
       max-width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
-      white-space: nowrap;
+      white-space: normal;
       -webkit-overflow-scrolling: touch;
     }
 
@@ -3196,7 +3219,7 @@
       max-width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
-      white-space: nowrap;
+      white-space: normal;
       vertical-align: bottom;
       -webkit-overflow-scrolling: touch;
     }
@@ -3212,12 +3235,12 @@
 
     #translation-library-restored .formula,
     .memory-card .formula {
-      display: inline-block;
+      display: block;
       max-width: 100%;
       overflow-x: auto;
       overflow-y: hidden;
       vertical-align: bottom;
-      white-space: nowrap;
+      white-space: normal;
       -webkit-overflow-scrolling: touch;
     }
 
